@@ -16,11 +16,24 @@ export const SharkTankScreen: React.FC = () => {
   const { sharkTankStartups, openModal, wallet, userProfile } = useApp();
   const [selectedIndustry, setSelectedIndustry] = useState<string>('all');
 
-  const industries = ['all', 'CleanTech', 'EdTech', 'FinTech', 'HealthTech', 'AgriTech', 'SaaS'];
+  const industries = [
+    'all',
+    'CleanTech',
+    'EdTech',
+    'FinTech',
+    'HealthTech',
+    'AgriTech',
+    'SaaS',
+    'AI & Robotics',
+    'D2C',
+    'EV & Mobility',
+  ];
 
   const filteredStartups = sharkTankStartups.filter((s) => {
     if (selectedIndustry === 'all') return true;
-    return s.industry.toLowerCase().includes(selectedIndustry.toLowerCase());
+    const sel = selectedIndustry.toLowerCase();
+    const ind = (s.industry || '').toLowerCase();
+    return ind.includes(sel) || sel.includes(ind);
   });
 
   return (

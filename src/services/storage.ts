@@ -44,7 +44,25 @@ export const StorageService = {
   async getUserProfile(): Promise<UserProfile | null> {
     try {
       const data = await AsyncStorage.getItem(STORAGE_KEYS.PROFILE);
-      return data ? JSON.parse(data) : null;
+      if (!data) return null;
+      const parsed: UserProfile = JSON.parse(data);
+      if (
+        parsed.name.includes('Shaurya') ||
+        parsed.name.includes('Prashant') ||
+        parsed.name.includes('Neha') ||
+        parsed.name.includes('Lavanya') ||
+        parsed.name.includes('Abhyudh') ||
+        parsed.name.includes('Abhimannyu') ||
+        parsed.name.includes('Anujeet')
+      ) {
+        parsed.name =
+          parsed.role === 'super_admin'
+            ? 'Chirag (Super Admin)'
+            : parsed.role === 'teacher'
+            ? 'Faculty Mentor'
+            : 'Student Investor';
+      }
+      return parsed;
     } catch (e) {
       console.error('Failed to get user profile', e);
       return null;

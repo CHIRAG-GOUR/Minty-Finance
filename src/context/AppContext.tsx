@@ -190,6 +190,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const liveFunds = await MarketDataService.getMutualFunds();
 
         if (storedProfile) {
+          // Sanitize any legacy cached names from older local storage
+          if (
+            storedProfile.name.includes('Shaurya') ||
+            storedProfile.name.includes('Prashant') ||
+            storedProfile.name.includes('Neha') ||
+            storedProfile.name.includes('Lavanya') ||
+            storedProfile.name.includes('Abhyudh') ||
+            storedProfile.name.includes('Abhimannyu') ||
+            storedProfile.name.includes('Anujeet')
+          ) {
+            storedProfile.name =
+              storedProfile.role === 'super_admin'
+                ? 'Chirag (Super Admin)'
+                : storedProfile.role === 'teacher'
+                ? 'Faculty Mentor'
+                : 'Student Investor';
+          }
           const { updatedProfile } = GamificationEngine.checkStreak(storedProfile);
           setUserProfile(updatedProfile);
           await FirebaseService.updateUserProfile(updatedProfile);
@@ -208,8 +225,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setWatchlist(storedWatchlist);
         setCohorts(fbCohorts);
         setMarketConfig(fbMarketConfig);
-        setSharkTankStartups(fbStartups);
         setMarketStatus(liveStatus);
+        const mergedStartups = MOCK_SHARK_TANK_STARTUPS.map((mock) => {
+          const cached = fbStartups?.find((s) => s.id === mock.id);
+          return cached ? { ...mock, ...cached } : mock;
+        });
+        setSharkTankStartups(mergedStartups);
         if (liveStocks && liveStocks.length > 0) {
           setStockCatalog(liveStocks);
         }

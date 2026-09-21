@@ -374,8 +374,10 @@ export const HomeScreen: React.FC = () => {
                         color={tx.type.includes('buy') ? THEME.colors.accentYellow : THEME.colors.obsidian}
                       />
                     </View>
-                    <View>
-                      <Text style={styles.recentTxTitle}>{tx.title}</Text>
+                    <View style={styles.recentTxTextWrap}>
+                      <Text style={styles.recentTxTitle} numberOfLines={2} ellipsizeMode="tail">
+                        {tx.title}
+                      </Text>
                       <Text style={styles.recentTxTime}>
                         {new Date(tx.timestamp).toLocaleTimeString('en-IN', {
                           hour: '2-digit',
@@ -676,15 +678,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 12,
+    gap: 10,
   },
   recentTxItemBorder: {
     borderBottomWidth: 1,
     borderBottomColor: THEME.colors.cardBorderSubtle,
   },
   recentTxLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  recentTxTextWrap: {
+    flex: 1,
+    paddingRight: 4,
   },
   txTypeIcon: {
     width: 34,
@@ -692,21 +700,26 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   recentTxTitle: {
     fontSize: 12,
     fontWeight: '700',
     color: THEME.colors.textPrimary,
+    lineHeight: 16,
   },
   recentTxTime: {
     fontSize: 10,
     color: THEME.colors.textMuted,
     fontWeight: '600',
+    marginTop: 2,
   },
   recentTxAmount: {
     fontSize: 13,
     fontWeight: '800',
     color: THEME.colors.textPrimary,
+    textAlign: 'right',
+    flexShrink: 0,
   },
   compoundCard: {
     flexDirection: 'row',
