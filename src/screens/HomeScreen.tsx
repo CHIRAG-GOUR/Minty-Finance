@@ -11,6 +11,7 @@ import { THEME } from '../constants/theme';
 import { Icon } from '../constants/icons';
 import { BalanceCard } from '../components/cards/BalanceCard';
 import { XPProgressCard } from '../components/cards/XPProgressCard';
+import { StockLineChart } from '../components/charts/StockLineChart';
 import { formatCurrency, formatPercentage } from '../utils/formatters';
 import { useApp } from '../context/AppContext';
 
@@ -113,19 +114,27 @@ export const HomeScreen: React.FC = () => {
                 </Text>
                 <View style={styles.indexChangeRow}>
                   <Icon
-                    name={nifty.changePercent >= 0 ? 'arrow-up-right' : 'arrow-down-right'}
+                    name={nifty.changePercent >= 0 ? 'arrow-up-right' : 'arrow-down-left'}
                     size={12}
-                    color={nifty.changePercent >= 0 ? '#16A34A' : THEME.colors.coral}
+                    color={nifty.changePercent >= 0 ? '#00D09C' : THEME.colors.coral}
                   />
                   <Text
                     style={[
                       styles.indexChangeText,
-                      { color: nifty.changePercent >= 0 ? '#16A34A' : THEME.colors.coral },
+                      { color: nifty.changePercent >= 0 ? '#00D09C' : THEME.colors.coral },
                     ]}
                   >
                     {nifty.changePercent >= 0 ? '+' : ''}
                     {formatPercentage(nifty.changePercent)}
                   </Text>
+                </View>
+                <View style={{ height: 40, marginTop: 4 }}>
+                  <StockLineChart
+                    data={nifty.sparkline}
+                    color={nifty.changePercent >= 0 ? '#00D09C' : THEME.colors.coral}
+                    height={40}
+                    showLabels={false}
+                  />
                 </View>
               </TouchableOpacity>
             )}
@@ -142,19 +151,27 @@ export const HomeScreen: React.FC = () => {
                 </Text>
                 <View style={styles.indexChangeRow}>
                   <Icon
-                    name={sensex.changePercent >= 0 ? 'arrow-up-right' : 'arrow-down-right'}
+                    name={sensex.changePercent >= 0 ? 'arrow-up-right' : 'arrow-down-left'}
                     size={12}
-                    color={sensex.changePercent >= 0 ? '#16A34A' : THEME.colors.coral}
+                    color={sensex.changePercent >= 0 ? '#00D09C' : THEME.colors.coral}
                   />
                   <Text
                     style={[
                       styles.indexChangeText,
-                      { color: sensex.changePercent >= 0 ? '#16A34A' : THEME.colors.coral },
+                      { color: sensex.changePercent >= 0 ? '#00D09C' : THEME.colors.coral },
                     ]}
                   >
                     {sensex.changePercent >= 0 ? '+' : ''}
                     {formatPercentage(sensex.changePercent)}
                   </Text>
+                </View>
+                <View style={{ height: 40, marginTop: 4 }}>
+                  <StockLineChart
+                    data={sensex.sparkline}
+                    color={sensex.changePercent >= 0 ? '#00D09C' : THEME.colors.coral}
+                    height={40}
+                    showLabels={false}
+                  />
                 </View>
               </TouchableOpacity>
             )}

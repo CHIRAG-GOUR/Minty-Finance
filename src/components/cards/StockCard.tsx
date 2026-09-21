@@ -20,19 +20,22 @@ export const StockCard: React.FC<StockCardProps> = ({
   onCardPress,
 }) => {
   const isPositive = stock.changePercent >= 0;
-  const trendColor = isPositive ? '#16A34A' : THEME.colors.coral;
+  const trendColor = isPositive ? '#00D09C' : '#EB5757';
 
-  const getRiskColor = () => {
-    switch (stock.risk) {
-      case 'Low':
-        return THEME.colors.primary;
-      case 'High':
-        return THEME.colors.coral;
-      case 'Moderate':
-      default:
-        return THEME.colors.amber;
-    }
+  const getStockEmblem = (sym: string) => {
+    if (sym.includes('RELIANCE')) return { bg: '#0284C7', text: 'RIL' };
+    if (sym.includes('TCS')) return { bg: '#1E3A8A', text: 'TCS' };
+    if (sym.includes('HDFC')) return { bg: '#DC2626', text: 'HDFC' };
+    if (sym.includes('INFY')) return { bg: '#0284C7', text: 'INFY' };
+    if (sym.includes('ICICI')) return { bg: '#D97706', text: 'ICICI' };
+    if (sym.includes('SBIN')) return { bg: '#0D9488', text: 'SBI' };
+    if (sym.includes('BHARTI')) return { bg: '#E11D48', text: 'AIR' };
+    if (sym.includes('ITC')) return { bg: '#7C3AED', text: 'ITC' };
+    if (sym.includes('TATAMOTORS') || sym.includes('TATA')) return { bg: '#0369A1', text: 'TATA' };
+    return { bg: '#00D09C', text: sym.slice(0, 3) };
   };
+
+  const emblem = getStockEmblem(stock.symbol);
 
   return (
     <TouchableOpacity
@@ -41,24 +44,29 @@ export const StockCard: React.FC<StockCardProps> = ({
       style={styles.card}
     >
       <View style={styles.headerRow}>
-        <View style={styles.companyInfo}>
-          <View style={styles.symbolRow}>
-            <Text style={styles.symbol}>{stock.symbol}</Text>
-            <View style={[styles.riskBadge, { borderColor: getRiskColor() }]}>
-              <Text style={[styles.riskText, { color: getRiskColor() }]}>{stock.risk} Risk</Text>
-            </View>
+        <View style={styles.headerLeft}>
+          <View style={[styles.emblemBox, { backgroundColor: emblem.bg }]}>
+            <Text style={styles.emblemText}>{emblem.text}</Text>
           </View>
-          <Text style={styles.companyName} numberOfLines={1}>
-            {stock.name}
-          </Text>
+          <View style={{ flex: 1 }}>
+            <View style={styles.symbolRow}>
+              <Text style={styles.symbol}>{stock.symbol}</Text>
+              <View style={styles.exchangePill}>
+                <Text style={styles.exchangeText}>{stock.exchange || 'NSE'}</Text>
+              </View>
+            </View>
+            <Text style={styles.companyName} numberOfLines={1}>
+              {stock.name}
+            </Text>
+          </View>
         </View>
 
         <View style={styles.priceInfo}>
           <Text style={styles.price}>{formatCurrency(stock.currentPrice, true)}</Text>
-          <View style={styles.changeRow}>
+          <View style={[styles.changeBadge, { backgroundColor: isPositive ? '#E8FAF2' : '#FFEBEF' }]}>
             <Icon
-              name={isPositive ? 'arrow-up-right' : 'arrow-down-right'}
-              size={12}
+              name={isPositive ? 'arrow-up-right' : 'arrow-down-left'}
+              size={10}
               color={trendColor}
             />
             <Text style={[styles.changeText, { color: trendColor }]}>
@@ -73,7 +81,7 @@ export const StockCard: React.FC<StockCardProps> = ({
         <StockLineChart
           data={stock.sparkline}
           color={trendColor}
-          height={80}
+          height={65}
           showLabels={false}
         />
       </View>
@@ -84,10 +92,12 @@ export const StockCard: React.FC<StockCardProps> = ({
           <Text style={styles.statLabel}>Sector</Text>
           <Text style={styles.statValue} numberOfLines={1}>{stock.sector}</Text>
         </View>
+        <View style={styles.statDivider} />
         <View style={styles.statItem}>
           <Text style={styles.statLabel}>Mkt Cap</Text>
           <Text style={styles.statValue}>{stock.marketCap}</Text>
         </View>
+        <View style={styles.statDivider} />
         <View style={styles.statItem}>
           <Text style={styles.statLabel}>P/E Ratio</Text>
           <Text style={styles.statValue}>{stock.peRatio}</Text>
@@ -99,11 +109,11 @@ export const StockCard: React.FC<StockCardProps> = ({
         <View style={styles.holdingStatus}>
           {heldShares > 0 ? (
             <Text style={styles.holdingText}>
-              Owned: <Text style={styles.holdingHighlight}>{heldShares} shares</Text> (
+              Owned: <Text style={styles.holdingHighlight}>{heldShares} sh</Text> (
               {formatCurrency(heldShares * stock.currentPrice)})
             </Text>
           ) : (
-            <Text style={styles.noHoldingText}>No active shares</Text>
+            <Text style={styles.noHoldingText}>1-tap virtual practice buy</Text>
           )}
         </View>
 
@@ -111,19 +121,25 @@ export const StockCard: React.FC<StockCardProps> = ({
           {heldShares > 0 ? (
             <TouchableOpacity
               activeOpacity={0.8}
-              onPress={() => onTradePress('sell')}
+              onPress={(e) => {
+                e.stopPropagation();
+                onTradePress('sell');
+              }}
               style={[styles.tradeBtn, styles.sellBtn]}
             >
-              <Text style={styles.sellBtnText}>Sell</Text>
+              <Text style={styles.sellBtnText}>SELL</Text>
             </TouchableOpacity>
           ) : null}
 
           <TouchableOpacity
             activeOpacity={0.8}
-            onPress={() => onTradePress('buy')}
+            onPress={(e) => {
+              e.stopPropagation();
+              onTradePress('buy');
+            }}
             style={[styles.tradeBtn, styles.buyBtn]}
           >
-            <Text style={styles.buyBtnText}>Buy</Text>
+            <Text style={styles.buyBtnText}>BUY</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -133,91 +149,120 @@ export const StockCard: React.FC<StockCardProps> = ({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: THEME.colors.card,
+    backgroundColor: '#FFFFFF',
     borderRadius: THEME.radii.xl,
-    padding: THEME.spacing.lg,
-    marginVertical: THEME.spacing.xs,
-    borderColor: THEME.colors.cardBorder,
+    padding: 14,
+    marginVertical: 5,
+    borderColor: '#E2E8F0',
     borderWidth: 1,
-    ...THEME.shadows.card,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
-  companyInfo: {
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     flex: 1,
     paddingRight: 8,
+  },
+  emblemBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emblemText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#FFFFFF',
   },
   symbolRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   symbol: {
-    fontSize: 18,
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#0F172A',
+  },
+  exchangePill: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  exchangeText: {
+    fontSize: 9,
     fontWeight: '800',
-    color: THEME.colors.textPrimary,
-  },
-  riskBadge: {
-    borderWidth: 1,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: THEME.radii.pill,
-  },
-  riskText: {
-    fontSize: 10,
-    fontWeight: '700',
+    color: '#64748B',
   },
   companyName: {
-    fontSize: 13,
-    color: THEME.colors.textSecondary,
-    marginTop: 2,
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 1,
   },
   priceInfo: {
     alignItems: 'flex-end',
   },
   price: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: THEME.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#0F172A',
   },
-  changeRow: {
+  changeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
-    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginTop: 3,
+    gap: 2,
   },
   changeText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   chartWrapper: {
-    marginVertical: 6,
+    marginVertical: 4,
   },
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: THEME.colors.backgroundSecondary,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
     padding: 8,
-    borderRadius: THEME.radii.md,
-    marginVertical: 8,
+    marginVertical: 6,
   },
   statItem: {
     flex: 1,
     alignItems: 'center',
   },
   statLabel: {
-    fontSize: 10,
-    color: THEME.colors.textMuted,
+    fontSize: 9,
+    color: '#94A3B8',
     fontWeight: '600',
   },
   statValue: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: THEME.colors.textPrimary,
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#1E293B',
     marginTop: 1,
+  },
+  statDivider: {
+    width: 1,
+    height: 18,
+    backgroundColor: '#E2E8F0',
+    alignSelf: 'center',
   },
   footerRow: {
     flexDirection: 'row',
@@ -225,50 +270,50 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: THEME.colors.cardBorderSubtle,
+    borderTopColor: '#F1F5F9',
   },
   holdingStatus: {
     flex: 1,
   },
   holdingText: {
-    fontSize: 12,
-    color: THEME.colors.textSecondary,
+    fontSize: 11,
+    color: '#475569',
   },
   holdingHighlight: {
-    fontWeight: '700',
-    color: THEME.colors.primary,
+    fontWeight: '800',
+    color: '#00D09C',
   },
   noHoldingText: {
-    fontSize: 11,
-    color: THEME.colors.textMuted,
+    fontSize: 10,
+    color: '#94A3B8',
   },
   tradeButtons: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
   },
   tradeBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: THEME.radii.md,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
   buyBtn: {
-    backgroundColor: THEME.colors.obsidian,
+    backgroundColor: '#00D09C',
   },
   buyBtnText: {
-    color: THEME.colors.accentYellow,
-    fontSize: 12,
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
   },
   sellBtn: {
-    backgroundColor: THEME.colors.coralSurface,
-    borderColor: THEME.colors.coralLight,
+    backgroundColor: '#FFEBEF',
+    borderColor: '#EB5757',
     borderWidth: 1,
   },
   sellBtnText: {
-    color: THEME.colors.coral,
-    fontSize: 12,
-    fontWeight: '700',
+    color: '#EB5757',
+    fontSize: 11,
+    fontWeight: '800',
   },
 });
