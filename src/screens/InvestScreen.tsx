@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { THEME } from '../constants/theme';
 import { Icon } from '../constants/icons';
@@ -18,6 +19,7 @@ import { formatCurrency, formatPercentage } from '../utils/formatters';
 import { calculateFDMaturity } from '../utils/financialMath';
 import { useApp } from '../context/AppContext';
 import { StockItem } from '../types';
+import { MarketDataService } from '../services/marketDataService';
 
 type InvestTab = 'stocks' | 'funds' | 'fds' | 'shark_tank';
 type StockFilter = 'all' | 'large_cap' | 'mid_cap' | 'small_cap' | 'gainers' | 'losers' | 'most_active' | 'watchlist';
@@ -39,6 +41,40 @@ export const InvestScreen: React.FC = () => {
   const [selectedSubTab, setSelectedSubTab] = useState<InvestTab>('stocks');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<StockFilter>('all');
+  const [liveSearchResults, setLiveSearchResults] = useState<StockItem[]>([]);
+  const [isSearchingLive, setIsSearchingLive] = useState(false);
+
+  // Debounced real-time Yahoo Finance live search for any unlisted/global equity
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed.length < 2) {
+      setLiveSearchResults([]);
+      setIsSearchingLive(false);
+      return;
+    }
+
+    setIsSearchingLive(true);
+    let isCancelled = false;
+
+    const timer = setTimeout(async () => {
+      try {
+        const results = await MarketDataService.searchLiveYahoo(trimmed);
+        if (!isCancelled) {
+          setLiveSearchResults(results);
+          setIsSearchingLive(false);
+        }
+      } catch {
+        if (!isCancelled) {
+          setIsSearchingLive(false);
+        }
+      }
+    }, 300);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
 
   // FD Simulator state
   const [fdPrincipal, setFdPrincipal] = useState<number>(25000);
@@ -109,6 +145,13 @@ export const InvestScreen: React.FC = () => {
     return list;
   }, [stockCatalog, searchQuery, selectedFilter, watchlist]);
 
+  // Additional live-discovered stocks from Yahoo Finance search not already in filteredStocks
+  const additionalLiveStocks = useMemo(() => {
+    if (!searchQuery.trim() || liveSearchResults.length === 0) return [];
+    const localKeys = new Set(filteredStocks.map((s) => s.symbol.toUpperCase()));
+    return liveSearchResults.filter((s) => !localKeys.has(s.symbol.toUpperCase()));
+  }, [liveSearchResults, filteredStocks, searchQuery]);
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -173,18 +216,43 @@ export const InvestScreen: React.FC = () => {
               <Icon name="search" size={16} color={THEME.colors.textMuted} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search stocks by name, symbol, sector (e.g. Reliance, TCS, HDFC)..."
+                placeholder="Search any stock on Yahoo in real-time (e.g. Swiggy, Paytm, Tesla, MRF)..."
                 placeholderTextColor={THEME.colors.textMuted}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 autoCapitalize="none"
               />
+              {isSearchingLive && (
+                <ActivityIndicator size="small" color={THEME.colors.primaryDark} style={{ marginRight: 4 }} />
+              )}
               {searchQuery.length > 0 && (
                 <TouchableOpacity onPress={() => setSearchQuery('')}>
                   <Icon name="x" size={16} color={THEME.colors.textMuted} />
                 </TouchableOpacity>
               )}
             </View>
+
+            {/* Quick Suggestions when search input is empty */}
+            {searchQuery.length === 0 && (
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.suggestionChipsScroll}
+              >
+                <Text style={styles.suggestionLabel}>Try searching:</Text>
+                {['Swiggy', 'Paytm', 'Zomato', 'Tata Motors', 'Tesla', 'MRF', 'Suzlon', 'Apple'].map((term) => (
+                  <TouchableOpacity
+                    key={term}
+                    activeOpacity={0.7}
+                    onPress={() => setSearchQuery(term)}
+                    style={styles.suggestionChip}
+                  >
+                    <Text style={styles.suggestionChipText}>{term}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
 
             {/* Filter Chips Horizontal Scroll */}
             <ScrollView
@@ -221,12 +289,16 @@ export const InvestScreen: React.FC = () => {
             {/* Results Count & Data Freshness Tag */}
             <View style={styles.resultsInfoRow}>
               <Text style={styles.resultsCountText}>
-                {filteredStocks.length} instruments
+                {filteredStocks.length + additionalLiveStocks.length} instruments{' '}
+                {searchQuery.trim().length >= 2 ? `for "${searchQuery}"` : ''}
               </Text>
-              <Text style={styles.freshnessText}>LIVE</Text>
+              <View style={styles.liveBadgeRow}>
+                <View style={styles.liveIndicatorDotGreen} />
+                <Text style={styles.freshnessText}>YAHOO LIVE FEED</Text>
+              </View>
             </View>
 
-            {/* Stock Cards List */}
+            {/* Stock Cards List (Catalog/Filtered) */}
             {filteredStocks.map((stock) => {
               const holding = stockHoldings.find((h) => h.symbol === stock.symbol);
               return (
@@ -239,12 +311,57 @@ export const InvestScreen: React.FC = () => {
               );
             })}
 
-            {filteredStocks.length === 0 && (
+            {/* Live Yahoo Finance Discovery Section */}
+            {additionalLiveStocks.length > 0 && (
+              <View style={styles.liveDiscoverySection}>
+                <View style={styles.liveDiscoveryHeader}>
+                  <View style={styles.liveDiscoveryHeaderLeft}>
+                    <View style={styles.livePulseDot} />
+                    <Text style={styles.liveDiscoveryTitle}>Live Yahoo Real-Time Results</Text>
+                  </View>
+                  <View style={styles.liveDiscoveryBadge}>
+                    <Text style={styles.liveDiscoveryBadgeText}>YAHOO LIVE</Text>
+                  </View>
+                </View>
+                <Text style={styles.liveDiscoverySub}>
+                  Discovered from live Yahoo exchange feed in real-time. Tap to trade or view live chart.
+                </Text>
+
+                {additionalLiveStocks.map((stock) => {
+                  const holding = stockHoldings.find((h) => h.symbol === stock.symbol);
+                  return (
+                    <StockCard
+                      key={stock.id}
+                      stock={stock}
+                      heldShares={holding?.shares || 0}
+                      onTradePress={(action) => openModal('stock_trade', { stock, action, holding })}
+                    />
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Live Searching Indicator */}
+            {isSearchingLive && filteredStocks.length === 0 && (
+              <View style={styles.liveSearchingBox}>
+                <ActivityIndicator size="small" color={THEME.colors.primaryDark} />
+                <Text style={styles.liveSearchingText}>
+                  Searching Yahoo Finance live exchange for "{searchQuery}"...
+                </Text>
+              </View>
+            )}
+
+            {/* Empty State */}
+            {!isSearchingLive && filteredStocks.length === 0 && additionalLiveStocks.length === 0 && (
               <View style={styles.emptyState}>
                 <Icon name="search" size={32} color={THEME.colors.textMuted} />
-                <Text style={styles.emptyStateTitle}>No instruments found</Text>
+                <Text style={styles.emptyStateTitle}>
+                  {searchQuery.trim() ? `No instruments found for "${searchQuery}"` : 'No instruments found'}
+                </Text>
                 <Text style={styles.emptyStateSub}>
-                  Try searching for Reliance, TCS, HDFC Bank, Infosys, or Tata Motors.
+                  {searchQuery.trim()
+                    ? 'Search any listed company or ticker symbol worldwide (e.g. SWIGGY, PAYTM, ZOMATO, MRF, AAPL, TSLA).'
+                    : 'Try searching for Reliance, TCS, HDFC Bank, Infosys, or Tata Motors.'}
                 </Text>
               </View>
             )}
@@ -614,7 +731,7 @@ const styles = StyleSheet.create({
     borderColor: THEME.colors.cardBorder,
     borderWidth: 1.5,
     gap: 8,
-    marginBottom: 10,
+    marginBottom: 8,
     ...THEME.shadows.sm,
   },
   searchInput: {
@@ -623,6 +740,31 @@ const styles = StyleSheet.create({
     color: THEME.colors.textPrimary,
     fontWeight: '600',
     padding: 0,
+  },
+  suggestionChipsScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  suggestionLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: THEME.colors.textMuted,
+    marginRight: 2,
+  },
+  suggestionChip: {
+    backgroundColor: THEME.colors.backgroundSecondary,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: THEME.radii.pill,
+    borderWidth: 1,
+    borderColor: THEME.colors.cardBorderSubtle,
+  },
+  suggestionChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: THEME.colors.textSecondary,
   },
   filterChipsScroll: {
     gap: 8,
@@ -659,11 +801,87 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: THEME.colors.textMuted,
   },
+  liveBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  liveIndicatorDotGreen: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#00D09C',
+  },
   freshnessText: {
     fontSize: 10,
     fontWeight: '800',
     color: THEME.colors.textMuted,
     letterSpacing: 0.5,
+  },
+  liveDiscoverySection: {
+    marginTop: 14,
+    marginBottom: 6,
+    backgroundColor: THEME.colors.backgroundSecondary,
+    borderRadius: THEME.radii.lg,
+    padding: 10,
+    borderWidth: 1.5,
+    borderColor: '#00D09C33',
+  },
+  liveDiscoveryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  liveDiscoveryHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  livePulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#00D09C',
+  },
+  liveDiscoveryTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: THEME.colors.textPrimary,
+  },
+  liveDiscoveryBadge: {
+    backgroundColor: '#00D09C',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  liveDiscoveryBadgeText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  liveDiscoverySub: {
+    fontSize: 10,
+    color: THEME.colors.textSecondary,
+    marginBottom: 8,
+  },
+  liveSearchingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    gap: 8,
+    backgroundColor: THEME.colors.card,
+    borderRadius: THEME.radii.md,
+    marginVertical: 12,
+    borderColor: THEME.colors.cardBorder,
+    borderWidth: 1,
+  },
+  liveSearchingText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: THEME.colors.textSecondary,
   },
   emptyState: {
     alignItems: 'center',

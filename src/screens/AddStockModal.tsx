@@ -6,12 +6,15 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { THEME } from '../constants/theme';
 import { ModalWrapper } from '../components/common/ModalWrapper';
 import { PrimaryButton } from '../components/common/PrimaryButton';
 import { StockItem, RiskLevel } from '../types';
 import { useApp } from '../context/AppContext';
+import { MarketDataService } from '../services/marketDataService';
+import { Icon } from '../constants/icons';
 
 interface AddStockModalProps {
   visible: boolean;
@@ -21,15 +24,42 @@ interface AddStockModalProps {
 export const AddStockModal: React.FC<AddStockModalProps> = ({ visible, onClose }) => {
   const { addNewStockToMarket, showToast } = useApp();
 
-  // Hooks must run on every render. Returning early above them changes the hook
-  // count between the hidden and visible renders, which React treats as fatal.
   const [symbol, setSymbol] = useState('');
   const [name, setName] = useState('');
   const [sector, setSector] = useState('');
   const [price, setPrice] = useState('150.00');
   const [risk, setRisk] = useState<RiskLevel>('Moderate');
+  const [isFetchingLive, setIsFetchingLive] = useState(false);
 
   if (!visible) return null;
+
+  const handleFetchYahoo = async () => {
+    const q = symbol.trim() || name.trim();
+    if (!q) {
+      showToast('Input Required', 'Enter a symbol or company name first.', 'info');
+      return;
+    }
+
+    setIsFetchingLive(true);
+    try {
+      const results = await MarketDataService.searchLiveYahoo(q);
+      if (results && results.length > 0) {
+        const best = results[0];
+        setSymbol(best.symbol);
+        setName(best.name);
+        setSector(best.sector || 'Live Market');
+        setPrice(best.currentPrice.toFixed(2));
+        setRisk(best.risk || 'Moderate');
+        showToast('Yahoo Data Loaded', `Fetched live quote for ${best.name} (₹${best.currentPrice})`, 'success');
+      } else {
+        showToast('Not Found on Yahoo', `No active live quote found for "${q}". You can enter custom values.`, 'warning');
+      }
+    } catch {
+      showToast('Network Alert', 'Could not query Yahoo in real time. Please enter manually.', 'warning');
+    } finally {
+      setIsFetchingLive(false);
+    }
+  };
 
   const handleCreate = async () => {
     if (!symbol.trim() || !name.trim()) return;
@@ -44,7 +74,7 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({ visible, onClose }
       previousClose: parsedPrice * 0.98,
       changePercent: 2.04,
       risk,
-      description: `Newly listed student simulated stock on the Minti Finance Exchange.`,
+      description: `${name.trim()} listed on the Minti Finance Exchange.`,
       marketCap: `₹${(parsedPrice * 10).toFixed(0)} Cr`,
       peRatio: 22.4,
       dividendYield: 1.5,
@@ -70,15 +100,31 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({ visible, onClose }
     >
       <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Stock Ticker Symbol</Text>
+          <View style={styles.labelRow}>
+            <Text style={styles.label}>Stock Ticker Symbol</Text>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={handleFetchYahoo}
+              disabled={isFetchingLive || (!symbol.trim() && !name.trim())}
+              style={styles.fetchLiveBtn}
+            >
+              {isFetchingLive ? (
+                <ActivityIndicator size="small" color={THEME.colors.primaryDark} />
+              ) : (
+                <>
+                  <Icon name="search" size={12} color={THEME.colors.primaryDark} />
+                  <Text style={styles.fetchLiveBtnText}>Fetch Live Yahoo</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
           <TextInput
             style={styles.input}
-            placeholder="e.g. SKY (Skyline Robotics)"
+            placeholder="e.g. SWIGGY, ZOMATO, PAYTM, TSLA..."
             placeholderTextColor={THEME.colors.textMuted}
             value={symbol}
             onChangeText={setSymbol}
             autoCapitalize="characters"
-            maxLength={6}
           />
         </View>
 
@@ -86,7 +132,7 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({ visible, onClose }
           <Text style={styles.label}>Company Full Name</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. Skyline Autonomous Drones"
+            placeholder="e.g. Swiggy Limited"
             placeholderTextColor={THEME.colors.textMuted}
             value={name}
             onChangeText={setName}
@@ -97,7 +143,7 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({ visible, onClose }
           <Text style={styles.label}>Industry / Sector</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. Robotics & Automation"
+            placeholder="e.g. Quick Commerce & Food Delivery"
             placeholderTextColor={THEME.colors.textMuted}
             value={sector}
             onChangeText={setSector}
@@ -165,6 +211,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: THEME.colors.textSecondary,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  fetchLiveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: THEME.colors.primarySurface,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: THEME.radii.sm,
+    borderColor: THEME.colors.primary,
+    borderWidth: 1,
+  },
+  fetchLiveBtnText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: THEME.colors.primaryDark,
   },
   input: {
     height: 46,

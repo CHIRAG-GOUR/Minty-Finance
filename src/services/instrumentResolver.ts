@@ -17,7 +17,7 @@ export type AssetType = 'equity' | 'index' | 'etf';
 export interface Instrument {
   id: string;
   symbol: string;
-  exchange: 'NSE' | 'BSE';
+  exchange: 'NSE' | 'BSE' | 'NYSE' | 'NASDAQ' | 'Global' | string;
   name: string;
   assetType: AssetType;
   providerInstrumentId: string;

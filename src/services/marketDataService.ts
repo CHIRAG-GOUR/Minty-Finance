@@ -28,6 +28,7 @@ export interface IMarketDataProvider {
   getStocks(): Promise<StockItem[]>;
   getStockQuote(symbol: string): Promise<StockItem | null>;
   searchStocks(query: string): Promise<StockItem[]>;
+  searchLiveYahoo(query: string): Promise<StockItem[]>;
   getHistoricalCandles(symbol: string, timeframe: string): Promise<HistoricalCandle[]>;
   getCompanyFundamentals(symbol: string): Promise<CompanyFundamentals | null>;
   getMutualFunds(): Promise<MutualFundItem[]>;
@@ -168,6 +169,10 @@ export class DeterministicMarketDataProvider implements IMarketDataProvider {
     );
   }
 
+  async searchLiveYahoo(query: string): Promise<StockItem[]> {
+    return this.searchStocks(query);
+  }
+
   async getHistoricalCandles(symbol: string, timeframe: string): Promise<HistoricalCandle[]> {
     const stock = await this.getStockQuote(symbol);
     if (!stock) return [];
@@ -252,60 +257,78 @@ export class LiveMarketDataProvider implements IMarketDataProvider {
   private fallbackProvider = new DeterministicMarketDataProvider();
   private cache: Map<string, { data: StockItem; timestamp: number }> = new Map();
   private catalogCache: { list: StockItem[]; timestamp: number } | null = null;
+  private searchCache: Map<string, { results: StockItem[]; timestamp: number }> = new Map();
   private readonly CACHE_TTL_MS = 10000; // 10 seconds live refresh window
 
   /**
    * Fetch live chart and quote directly from exchange feed.
    */
   async fetchLiveChartData(symbol: string, timeframe: string = '1D') {
-    const ticker = symbolToTicker(symbol);
+    let ticker = symbolToTicker(symbol);
     const { interval, range } = timeframeToYahooParams(timeframe);
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=${interval}&range=${range}`;
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const tryFetch = async (t: string) => {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?interval=${interval}&range=${range}`;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(url, {
+          headers: {
+            Accept: 'application/json',
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
+          },
+          signal: controller.signal,
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const json = await response.json();
+        const result = json?.chart?.result?.[0];
+        if (!result) throw new Error('No chart result');
+
+        const meta = result.meta || {};
+        const timestamps = result.timestamp || [];
+        const quote = result.indicators?.quote?.[0] || {};
+        const opens = quote.open || [];
+        const highs = quote.high || [];
+        const lows = quote.low || [];
+        const closes = quote.close || [];
+        const volumes = quote.volume || [];
+
+        const candles: HistoricalCandle[] = [];
+        for (let i = 0; i < timestamps.length; i++) {
+          const close = closes[i];
+          if (close != null && !isNaN(close) && close > 0) {
+            candles.push({
+              timestamp: new Date(timestamps[i] * 1000).toISOString(),
+              open: round(Number(opens[i] ?? close), 2),
+              high: round(Number(highs[i] ?? close), 2),
+              low: round(Number(lows[i] ?? close), 2),
+              close: round(Number(close), 2),
+              volume: Math.floor(Number(volumes[i] ?? 0)),
+            });
+          }
+        }
+
+        return { meta, candles };
+      } finally {
+        clearTimeout(timer);
+      }
+    };
 
     try {
-      const response = await fetch(url, {
-        headers: {
-          Accept: 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
-        },
-        signal: controller.signal,
-      });
-
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const json = await response.json();
-      const result = json?.chart?.result?.[0];
-      if (!result) throw new Error('No chart result');
-
-      const meta = result.meta || {};
-      const timestamps = result.timestamp || [];
-      const quote = result.indicators?.quote?.[0] || {};
-      const opens = quote.open || [];
-      const highs = quote.high || [];
-      const lows = quote.low || [];
-      const closes = quote.close || [];
-      const volumes = quote.volume || [];
-
-      const candles: HistoricalCandle[] = [];
-      for (let i = 0; i < timestamps.length; i++) {
-        const close = closes[i];
-        if (close != null && !isNaN(close) && close > 0) {
-          candles.push({
-            timestamp: new Date(timestamps[i] * 1000).toISOString(),
-            open: round(Number(opens[i] ?? close), 2),
-            high: round(Number(highs[i] ?? close), 2),
-            low: round(Number(lows[i] ?? close), 2),
-            close: round(Number(close), 2),
-            volume: Math.floor(Number(volumes[i] ?? 0)),
-          });
+      return await tryFetch(ticker);
+    } catch (err) {
+      if (ticker.endsWith('.NS')) {
+        const raw = symbol.toUpperCase().replace(/\.NS$/, '');
+        try {
+          return await tryFetch(raw);
+        } catch {
+          return await tryFetch(`${raw}.BO`);
         }
       }
-
-      return { meta, candles };
-    } finally {
-      clearTimeout(timer);
+      throw err;
     }
   }
 
@@ -432,15 +455,260 @@ export class LiveMarketDataProvider implements IMarketDataProvider {
   }
 
   async searchStocks(query: string): Promise<StockItem[]> {
+    const q = typeof query === 'string' ? query.trim() : '';
+    if (!q) return this.getStocks();
+
     const all = await this.getStocks();
-    const q = typeof query === 'string' ? query.trim().toUpperCase() : '';
-    if (!q) return all;
-    return all.filter(
+    const upperQ = q.toUpperCase();
+
+    // 1. Search local universe
+    const localMatches = all.filter(
       (s) =>
-        s.symbol.toUpperCase().includes(q) ||
-        s.name.toUpperCase().includes(q) ||
-        s.sector.toUpperCase().includes(q)
+        s.symbol.toUpperCase().includes(upperQ) ||
+        s.name.toUpperCase().includes(upperQ) ||
+        s.sector.toUpperCase().includes(upperQ)
     );
+
+    // 2. Query Yahoo Finance live exchange in real-time
+    if (q.length >= 2) {
+      try {
+        const liveYahooMatches = await this.searchLiveYahoo(q);
+        const localKeys = new Set(localMatches.map((s) => instrumentKey(s)));
+        const combined = [...localMatches];
+
+        for (const item of liveYahooMatches) {
+          const k = instrumentKey(item);
+          if (k && !localKeys.has(k)) {
+            localKeys.add(k);
+            combined.push(item);
+          }
+        }
+        return combined;
+      } catch {
+        // Fall back to local matches
+      }
+    }
+
+    return localMatches;
+  }
+
+  /**
+   * Real-time search across live exchanges (NSE, BSE, Global) via Yahoo Finance API
+   */
+  async searchLiveYahoo(query: string): Promise<StockItem[]> {
+    const q = query.trim();
+    if (!q) return [];
+
+    const cacheKey = q.toLowerCase();
+    const cached = this.searchCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < 30000) {
+      return cached.results;
+    }
+
+    const upperQ = q.toUpperCase();
+    const directCandidates = [
+      upperQ.endsWith('.NS') || upperQ.endsWith('.BO') || upperQ.startsWith('^')
+        ? upperQ
+        : `${upperQ}.NS`,
+      upperQ,
+      `${upperQ}.BO`,
+    ];
+
+    const searchUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(
+      q
+    )}&quotesCount=10&newsCount=0&enableFuzzyQuery=true`;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const [searchRes, ...directResults] = await Promise.allSettled([
+        fetch(searchUrl, {
+          headers: {
+            Accept: 'application/json',
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
+          },
+          signal: controller.signal,
+        }).then((r) => (r.ok ? r.json() : null)),
+        ...directCandidates.map((sym) => this.fetchLiveChartData(sym, '1D')),
+      ]);
+
+      const foundItems: StockItem[] = [];
+      const seenSymbols = new Set<string>();
+
+      // Direct ticker quote resolution
+      directResults.forEach((res) => {
+        if (res.status === 'fulfilled' && res.value && res.value.meta) {
+          const meta = res.value.meta;
+          const livePrice = toFiniteNumber(meta.regularMarketPrice, 0);
+          if (livePrice > 0) {
+            const rawSym = meta.symbol || '';
+            const displaySym = rawSym.replace(/\.(NS|BO)$/, '');
+            const key = instrumentKey(displaySym) || displaySym;
+            if (key && !seenSymbols.has(key.toUpperCase())) {
+              seenSymbols.add(key.toUpperCase());
+              const prevClose = toFiniteNumber(
+                meta.chartPreviousClose ?? meta.previousClose,
+                livePrice
+              );
+              const change = round(livePrice - prevClose, 2);
+              const changePercent = round(safePercent(change, prevClose), 2);
+
+              foundItems.push({
+                id: `stock_live_${key}`,
+                symbol: key,
+                name: meta.longName || meta.shortName || key,
+                exchange:
+                  meta.fullExchangeName === 'BSE' || rawSym.endsWith('.BO')
+                    ? 'BSE'
+                    : meta.fullExchangeName?.includes('Nasdaq') ||
+                      meta.fullExchangeName?.includes('NYSE')
+                    ? 'NYSE/NASDAQ'
+                    : 'NSE',
+                sector: meta.instrumentType === 'ETF' ? 'ETF' : 'Live Market',
+                currentPrice: round(livePrice, 2),
+                openPrice: round(prevClose, 2),
+                dayHigh: round(toFiniteNumber(meta.regularMarketDayHigh, livePrice), 2),
+                dayLow: round(toFiniteNumber(meta.regularMarketDayLow, livePrice), 2),
+                previousClose: round(prevClose, 2),
+                change,
+                changePercent,
+                volume: toFiniteNumber(meta.regularMarketVolume, 500000),
+                fiftyTwoWeekHigh: round(toFiniteNumber(meta.fiftyTwoWeekHigh, livePrice * 1.25), 2),
+                fiftyTwoWeekLow: round(toFiniteNumber(meta.fiftyTwoWeekLow, livePrice * 0.75), 2),
+                risk: 'Moderate',
+                description: `${meta.longName || key} listed on ${
+                  meta.fullExchangeName || 'Exchange'
+                }. Real-time quote fetched live from Yahoo Finance.`,
+                marketCap: 'Live Market Instrument',
+                peRatio: 22.5,
+                eps: round(livePrice / 25, 2),
+                roe: 16.0,
+                debtToEquity: 0.4,
+                dividendYield: 1.0,
+                dataFreshness: 'LIVE',
+                lastTradedTime: new Date().toISOString(),
+                sparkline:
+                  res.value.candles.length >= 7
+                    ? res.value.candles.slice(-7).map((c) => c.close)
+                    : [livePrice],
+                historical1D:
+                  res.value.candles.length > 0 ? res.value.candles.map((c) => c.close) : [livePrice],
+                historical1W: [livePrice],
+                historical1M: [livePrice],
+                historical1Y: [livePrice],
+              });
+            }
+          }
+        }
+      });
+
+      // Fuzzy search quote resolution
+      if (searchRes.status === 'fulfilled' && searchRes.value?.quotes) {
+        const quotes = searchRes.value.quotes as Array<Record<string, unknown>>;
+        const validQuotes = quotes.filter(
+          (item) =>
+            item.quoteType === 'EQUITY' || item.quoteType === 'ETF' || item.quoteType === 'INDEX'
+        );
+
+        const missingQuotes = validQuotes
+          .filter((item) => {
+            const rawSym = String(item.symbol || '');
+            const cleanSym = rawSym.replace(/\.(NS|BO)$/, '').toUpperCase();
+            return cleanSym && !seenSymbols.has(cleanSym);
+          })
+          .slice(0, 6);
+
+        const quoteDetails = await Promise.allSettled(
+          missingQuotes.map((item) => this.fetchLiveChartData(String(item.symbol), '1D'))
+        );
+
+        quoteDetails.forEach((res, idx) => {
+          const item = missingQuotes[idx];
+          if (res.status === 'fulfilled' && res.value && res.value.meta) {
+            const meta = res.value.meta;
+            const livePrice = toFiniteNumber(meta.regularMarketPrice, 0);
+            if (livePrice > 0) {
+              const rawSym = String(item.symbol || '');
+              const displaySym = rawSym.replace(/\.(NS|BO)$/, '');
+              const key = instrumentKey(displaySym) || displaySym;
+              if (key && !seenSymbols.has(key.toUpperCase())) {
+                seenSymbols.add(key.toUpperCase());
+                const prevClose = toFiniteNumber(
+                  meta.chartPreviousClose ?? meta.previousClose,
+                  livePrice
+                );
+                const change = round(livePrice - prevClose, 2);
+                const changePercent = round(safePercent(change, prevClose), 2);
+
+                foundItems.push({
+                  id: `stock_live_${key}`,
+                  symbol: key,
+                  name: String(item.longname || item.shortname || meta.longName || key),
+                  exchange:
+                    item.exchange === 'BSE' || rawSym.endsWith('.BO')
+                      ? 'BSE'
+                      : rawSym.includes('.')
+                      ? 'NSE'
+                      : 'Global',
+                  sector: String(
+                    item.sector ||
+                      item.industry ||
+                      (item.quoteType === 'ETF' ? 'ETF' : 'Live Market')
+                  ),
+                  currentPrice: round(livePrice, 2),
+                  openPrice: round(prevClose, 2),
+                  dayHigh: round(toFiniteNumber(meta.regularMarketDayHigh, livePrice), 2),
+                  dayLow: round(toFiniteNumber(meta.regularMarketDayLow, livePrice), 2),
+                  previousClose: round(prevClose, 2),
+                  change,
+                  changePercent,
+                  volume: toFiniteNumber(meta.regularMarketVolume, 500000),
+                  fiftyTwoWeekHigh: round(
+                    toFiniteNumber(meta.fiftyTwoWeekHigh, livePrice * 1.25),
+                    2
+                  ),
+                  fiftyTwoWeekLow: round(
+                    toFiniteNumber(meta.fiftyTwoWeekLow, livePrice * 0.75),
+                    2
+                  ),
+                  risk: 'Moderate',
+                  description: `${
+                    item.longname || item.shortname || key
+                  } real-time market quote fetched live from Yahoo Finance.`,
+                  marketCap: 'Live Market Instrument',
+                  peRatio: 22.5,
+                  eps: round(livePrice / 25, 2),
+                  roe: 16.0,
+                  debtToEquity: 0.4,
+                  dividendYield: 1.0,
+                  dataFreshness: 'LIVE',
+                  lastTradedTime: new Date().toISOString(),
+                  sparkline:
+                    res.value.candles.length >= 7
+                      ? res.value.candles.slice(-7).map((c) => c.close)
+                      : [livePrice],
+                  historical1D:
+                    res.value.candles.length > 0
+                      ? res.value.candles.map((c) => c.close)
+                      : [livePrice],
+                  historical1W: [livePrice],
+                  historical1M: [livePrice],
+                  historical1Y: [livePrice],
+                });
+              }
+            }
+          }
+        });
+      }
+
+      const normalized = normalizeStockList(foundItems);
+      this.searchCache.set(cacheKey, { results: normalized, timestamp: Date.now() });
+      return normalized;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async getHistoricalCandles(symbol: string, timeframe: string): Promise<HistoricalCandle[]> {

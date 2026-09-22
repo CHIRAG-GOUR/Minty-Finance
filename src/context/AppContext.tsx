@@ -457,7 +457,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const buyStock = async (symbol: string, shares: number): Promise<boolean> => {
-    const stock = stockCatalog.find((s) => s.symbol.toUpperCase() === symbol.toUpperCase());
+    let stock = stockCatalog.find((s) => s.symbol.toUpperCase() === symbol.toUpperCase());
+    if (!stock) {
+      const liveStock = await MarketDataService.getStockQuote(symbol);
+      if (liveStock) {
+        stock = liveStock;
+        setStockCatalog((prev) => [
+          liveStock,
+          ...prev.filter((s) => s.symbol.toUpperCase() !== symbol.toUpperCase()),
+        ]);
+      }
+    }
+
     if (!stock) {
       showToast('Stock Not Found', `Instrument ${symbol} is not listed.`, 'warning');
       return false;
@@ -497,7 +508,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const sellStock = async (symbol: string, shares: number): Promise<boolean> => {
-    const stock = stockCatalog.find((s) => s.symbol.toUpperCase() === symbol.toUpperCase());
+    let stock = stockCatalog.find((s) => s.symbol.toUpperCase() === symbol.toUpperCase());
+    if (!stock) {
+      const liveStock = await MarketDataService.getStockQuote(symbol);
+      if (liveStock) {
+        stock = liveStock;
+        setStockCatalog((prev) => [
+          liveStock,
+          ...prev.filter((s) => s.symbol.toUpperCase() !== symbol.toUpperCase()),
+        ]);
+      }
+    }
+
     if (!stock) {
       showToast('Stock Not Found', `Instrument ${symbol} is not listed.`, 'warning');
       return false;

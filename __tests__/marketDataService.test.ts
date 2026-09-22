@@ -92,5 +92,19 @@ describe('MarketDataService & Real-Time Providers', () => {
       const candles = await liveProvider.getHistoricalCandles('TCS', '1D');
       expect(candles.length).toBeGreaterThan(0);
     });
+
+    it('searches live Yahoo and returns normalized stock list', async () => {
+      const results = await liveProvider.searchLiveYahoo('RELIANCE');
+      expect(Array.isArray(results)).toBe(true);
+      if (results.length > 0) {
+        expect(results[0]).toHaveProperty('symbol');
+        expect(Number.isFinite(results[0].currentPrice)).toBe(true);
+      }
+    });
+
+    it('searches live Yahoo gracefully for empty query', async () => {
+      const results = await liveProvider.searchLiveYahoo('');
+      expect(results).toEqual([]);
+    });
   });
 });

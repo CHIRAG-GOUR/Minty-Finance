@@ -187,7 +187,7 @@ export interface StockItem {
   id: string;
   symbol: string;
   name: string;
-  exchange?: 'NSE' | 'BSE';
+  exchange?: 'NSE' | 'BSE' | 'NYSE' | 'NASDAQ' | 'Global' | string;
   sector: string;
   currentPrice: number;
   openPrice?: number;
