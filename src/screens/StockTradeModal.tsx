@@ -8,6 +8,7 @@ import {
   TextInput,
   Share,
   Platform,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { THEME } from '../constants/theme';
@@ -22,6 +23,7 @@ import {
   formatPercentage,
   formatQuantity,
   formatSignedCurrency,
+  formatCandleDate,
   toWidthPercent,
   UNAVAILABLE,
 } from '../utils/formatters';
@@ -68,6 +70,31 @@ function getStockEmblem(sym: string): { bg: string; text: string } {
   if (s.includes('TATAMOTORS') || s.includes('TATA')) return { bg: '#0369A1', text: 'TATA' };
   return { bg: POSITIVE, text: s.slice(0, 3) || '—' };
 }
+
+const StockTradeEmblem: React.FC<{ symbol: string; logoUrl?: string }> = ({ symbol, logoUrl }) => {
+  const [imageError, setImageError] = useState(false);
+  const emblem = getStockEmblem(symbol);
+
+  if (logoUrl && !imageError) {
+    return (
+      <View style={styles.stockLogoBox}>
+        <Image
+          source={{ uri: logoUrl }}
+          style={styles.stockLogoImage}
+          onError={() => setImageError(true)}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.stockEmblem, { backgroundColor: emblem.bg }]}>
+      <Text style={styles.stockEmblemText} numberOfLines={1}>
+        {emblem.text}
+      </Text>
+    </View>
+  );
+};
 
 const StockTradeModalBody: React.FC<StockTradeModalProps> = ({ visible, data, onClose }) => {
   const {
@@ -166,6 +193,19 @@ const StockTradeModalBody: React.FC<StockTradeModalProps> = ({ visible, data, on
   const chartSeries = series.length >= 2 ? series : fallbackSeries;
   const chartHasData = chartSeries.length >= 2;
 
+  const chartPoints = useMemo(() => {
+    if (candles && candles.length >= 2) {
+      return candles.map((c) => ({
+        date: formatCandleDate(c.timestamp, selectedTimeframe),
+        value: c.close,
+      }));
+    }
+    if (chartSeries.length >= 2) {
+      return chartSeries;
+    }
+    return [];
+  }, [candles, chartSeries, selectedTimeframe]);
+
   const price = stock && isFiniteNumber(stock.currentPrice) ? stock.currentPrice : null;
   const isPriced = price !== null && price > 0;
   const heldShares = position.shares;
@@ -231,7 +271,6 @@ const StockTradeModalBody: React.FC<StockTradeModalProps> = ({ visible, data, on
 
   const changePercent = isFiniteNumber(stock.changePercent) ? stock.changePercent : null;
   const isPos = (changePercent ?? 0) >= 0;
-  const emblem = getStockEmblem(stock.symbol);
   const canSell = heldShares > 0 && isPriced;
   const canBuy = instrument.tradable && isPriced;
 
@@ -352,7 +391,7 @@ const StockTradeModalBody: React.FC<StockTradeModalProps> = ({ visible, data, on
 
     return (
       <GrowwInteractiveChart
-        data={chartSeries}
+        data={chartPoints}
         currentPrice={price ?? undefined}
         timeframe={selectedTimeframe}
         onTimeframeChange={setSelectedTimeframe}
@@ -376,11 +415,7 @@ const StockTradeModalBody: React.FC<StockTradeModalProps> = ({ visible, data, on
         {/* Header: identity, live price and change */}
         <View style={styles.topHeaderBar}>
           <View style={styles.topHeaderLeft}>
-            <View style={[styles.stockEmblem, { backgroundColor: emblem.bg }]}>
-              <Text style={styles.stockEmblemText} numberOfLines={1}>
-                {emblem.text}
-              </Text>
-            </View>
+            <StockTradeEmblem symbol={stock.symbol} logoUrl={stock.logoUrl} />
             <View style={styles.headerTextCol}>
               <Text style={styles.stockTitleText} numberOfLines={2}>
                 {stock.name}
@@ -976,6 +1011,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+  },
+  stockLogoBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  stockLogoImage: {
+    width: 32,
+    height: 32,
+    resizeMode: 'contain',
   },
   stockEmblemText: {
     fontSize: 14,

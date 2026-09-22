@@ -1,6 +1,7 @@
 import {
   symbolToTicker,
   timeframeToYahooParams,
+  getStockLogoUrl,
   LiveMarketDataProvider,
   DeterministicMarketDataProvider,
 } from '../src/services/marketDataService';
@@ -24,6 +25,16 @@ describe('MarketDataService & Real-Time Providers', () => {
       expect(symbolToTicker('RELIANCE.NS')).toBe('RELIANCE.NS');
       expect(symbolToTicker('TCS.BO')).toBe('TCS.BO');
       expect(symbolToTicker('^NSEI')).toBe('^NSEI');
+    });
+  });
+
+  describe('getStockLogoUrl', () => {
+    it('returns valid favicon URLs for known and dynamic equities', () => {
+      expect(getStockLogoUrl('RELIANCE')).toContain('ril.com');
+      expect(getStockLogoUrl('TCS')).toContain('tcs.com');
+      expect(getStockLogoUrl('ESDS')).toContain('esds.co.in');
+      expect(getStockLogoUrl('SWIGGY')).toContain('swiggy.com');
+      expect(getStockLogoUrl('AAPL')).toContain('apple.com');
     });
   });
 
@@ -110,6 +121,11 @@ describe('MarketDataService & Real-Time Providers', () => {
           zomatoResults.some((s) => s.symbol === 'ETERNAL' || s.symbol === 'ZOMATO' || s.name.includes('Zomato'))
         ).toBe(true);
       }
+    });
+
+    it('resolves newly listed stocks like ESDS through aliases', async () => {
+      const esdsResults = await liveProvider.searchLiveYahoo('ESDS');
+      expect(Array.isArray(esdsResults)).toBe(true);
     });
 
     it('returns empty array when search query matches no authentic instruments', async () => {

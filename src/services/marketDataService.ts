@@ -239,10 +239,129 @@ export class DeterministicMarketDataProvider implements IMarketDataProvider {
       changePercent: round(safePercent(newChange, previousClose), 2),
       dayHigh: Math.max(toFiniteNumber(stock.dayHigh, updatedLTP), updatedLTP),
       dayLow: Math.min(toFiniteNumber(stock.dayLow, updatedLTP), updatedLTP),
+      logoUrl: stock.logoUrl || getStockLogoUrl(stock.symbol, stock.name),
       lastTradedTime: new Date().toISOString(),
       dataFreshness: 'LIVE',
     };
   }
+}
+
+export const KNOWN_STOCK_DOMAINS: Record<string, string> = {
+  RELIANCE: 'ril.com',
+  RIL: 'ril.com',
+  TCS: 'tcs.com',
+  INFY: 'infosys.com',
+  INFOSYS: 'infosys.com',
+  HDFCBANK: 'hdfcbank.com',
+  HDFC: 'hdfcbank.com',
+  ICICIBANK: 'icicibank.com',
+  ICICI: 'icicibank.com',
+  SBIN: 'sbi.co.in',
+  SBI: 'sbi.co.in',
+  BHARTIARTL: 'airtel.in',
+  AIRTEL: 'airtel.in',
+  ITC: 'itcportal.com',
+  TATAMOTORS: 'tatamotors.com',
+  TMPV: 'tatamotors.com',
+  TMCV: 'tatamotors.com',
+  TATASTEEL: 'tatasteel.com',
+  TATAPOWER: 'tatapower.com',
+  TRENT: 'mywestside.com',
+  TITAN: 'titancompany.in',
+  LT: 'larsentoubro.com',
+  WIPRO: 'wipro.com',
+  HCLTECH: 'hcltech.com',
+  TECHM: 'techmahindra.com',
+  LTIM: 'ltimindtree.com',
+  MARUTI: 'marutisuzuki.com',
+  'BAJAJ-AUTO': 'bajajauto.com',
+  BAJFINANCE: 'bajajfinserv.in',
+  BAJAJFINSV: 'bajajfinserv.in',
+  KOTAKBANK: 'kotakbank.com',
+  AXISBANK: 'axisbank.com',
+  INDUSINDBK: 'indusind.com',
+  YESBANK: 'yesbank.in',
+  IDFCFIRSTB: 'idfcfirstbank.com',
+  SUNPHARMA: 'sunpharma.com',
+  DRREDDY: 'drreddys.com',
+  CIPLA: 'cipla.com',
+  DIVISLAB: 'divislaboratories.com',
+  APOLLOHOSP: 'apollohospitals.com',
+  NESTLEIND: 'nestle.in',
+  HINDUNILVR: 'hul.co.in',
+  BRITANNIA: 'britannia.co.in',
+  DABUR: 'dabur.com',
+  GODREJCP: 'godrejcp.com',
+  ASIANPAINT: 'asianpaints.com',
+  PIDILITIND: 'pidilite.com',
+  DMART: 'dmartindia.com',
+  ADANIENT: 'adani.com',
+  ADANIPORTS: 'adani.com',
+  ADANIPOWER: 'adani.com',
+  ADANIGREEN: 'adani.com',
+  ATGL: 'adanigas.com',
+  AWL: 'adaniwilmar.com',
+  NTPC: 'ntpc.co.in',
+  POWERGRID: 'powergrid.in',
+  ONGC: 'ongcindia.com',
+  COALINDIA: 'coalindia.in',
+  IOC: 'iocl.com',
+  BPCL: 'bharatpetroleum.in',
+  SUZLON: 'suzlon.com',
+  SWIGGY: 'swiggy.com',
+  ZOMATO: 'zomato.com',
+  ETERNAL: 'zomato.com',
+  PAYTM: 'paytm.com',
+  NYKAA: 'nykaa.com',
+  HONASA: 'mamaearth.in',
+  OLAELEC: 'olaelectric.com',
+  POLICYBZR: 'policybazaar.com',
+  DELHIVERY: 'delhivery.com',
+  MAPMYINDIA: 'mapmyindia.com',
+  NAUKRI: 'naukri.com',
+  MRF: 'mrftyres.com',
+  APOLLOTYRE: 'apollotyres.com',
+  CEATLTD: 'ceat.com',
+  HAL: 'hal-india.co.in',
+  BEL: 'bel-india.in',
+  MAZDOCK: 'mazagondock.in',
+  COCHINSHIP: 'cochinshipyard.in',
+  RVNL: 'rvnl.org',
+  IRCTC: 'irctc.co.in',
+  IRFC: 'irfc.co.in',
+  CDSL: 'cdslindia.com',
+  BSE: 'bseindia.com',
+  MCX: 'mcxindia.com',
+  ANGELONE: 'angelone.in',
+  JIOFIN: 'jiofinance.in',
+  WAAREEENER: 'waaree.com',
+  PREMIERENE: 'premierenergies.com',
+  ESDS: 'esds.co.in',
+  AAPL: 'apple.com',
+  MSFT: 'microsoft.com',
+  GOOGL: 'google.com',
+  GOOG: 'google.com',
+  AMZN: 'amazon.com',
+  TSLA: 'tesla.com',
+  NVDA: 'nvidia.com',
+  META: 'meta.com',
+  NFLX: 'netflix.com',
+};
+
+/**
+ * Returns a high-resolution favicon / brand logo URL for any searched stock or company.
+ */
+export function getStockLogoUrl(symbol: string, companyName?: string): string {
+  const cleanSym = (symbol || '').replace(/\.(NS|BO)$/i, '').toUpperCase();
+  const domain = KNOWN_STOCK_DOMAINS[cleanSym];
+  if (domain) {
+    return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+  }
+  // Try clean symbol heuristics
+  if (cleanSym.length >= 3 && !cleanSym.includes('^') && !cleanSym.includes(' ')) {
+    return `https://www.google.com/s2/favicons?domain=${cleanSym.toLowerCase()}.com&sz=128`;
+  }
+  return '';
 }
 
 /**
@@ -262,6 +381,10 @@ export const STOCK_ALIAS_MAP: Record<string, string[]> = {
   RBA: ['RBA.NS', 'RBA.BO'],
 
   // Tech, E-commerce & Startups
+  ESDS: ['ESDS.NS', 'ESDS.BO'],
+  'ES DS': ['ESDS.NS', 'ESDS.BO'],
+  'ESDS SOFTWARE': ['ESDS.NS', 'ESDS.BO'],
+  'ESDS TECH': ['ESDS.NS', 'ESDS.BO'],
   PAYTM: ['PAYTM.NS', 'PAYTM.BO'],
   ONE97: ['PAYTM.NS', 'PAYTM.BO'],
   NYKAA: ['NYKAA.NS', 'NYKAA.BO'],
@@ -825,6 +948,7 @@ export class LiveMarketDataProvider implements IMarketDataProvider {
         roe: fallback?.roe ?? 18.2,
         debtToEquity: fallback?.debtToEquity ?? 0.35,
         dividendYield: fallback?.dividendYield ?? 1.2,
+        logoUrl: getStockLogoUrl(key, meta.longName || meta.shortName),
         dataFreshness: 'LIVE',
         lastTradedTime: new Date().toISOString(),
         sparkline: sparkline.length > 0 ? sparkline : [livePrice],
@@ -1078,6 +1202,7 @@ export class LiveMarketDataProvider implements IMarketDataProvider {
             roe: 16.0,
             debtToEquity: 0.4,
             dividendYield: 1.0,
+            logoUrl: getStockLogoUrl(rawSymbol || displaySymbol, formattedName),
             dataFreshness: 'LIVE',
             lastTradedTime: new Date().toISOString(),
             sparkline:

@@ -158,11 +158,11 @@ export const BalanceCard: React.FC = () => {
           <TouchableOpacity
             activeOpacity={0.9}
             onPressIn={() => animatePress(btnScale1)}
-            onPress={() => setActiveTab('markets')}
+            onPress={() => setActiveTab('invest')}
             style={styles.actionBtnDark}
           >
-            <Icon name="invest" size={15} color={THEME.colors.accentYellow} />
-            <Text style={styles.actionBtnDarkText}>Explore Markets</Text>
+            <Icon name="stocks" size={15} color={THEME.colors.accentYellow} />
+            <Text style={styles.actionBtnDarkText}>Explore Stocks</Text>
           </TouchableOpacity>
         </Animated.View>
 

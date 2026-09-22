@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { THEME } from '../../constants/theme';
 import { Icon } from '../../constants/icons';
 import { StockItem } from '../../types';
@@ -15,19 +15,8 @@ interface StockCardProps {
   onCardPress?: () => void;
 }
 
-export const StockCard: React.FC<StockCardProps> = ({
-  stock,
-  heldShares = 0,
-  onTradePress,
-  onCardPress,
-}) => {
-  // An unknown change must not read as a gain, so require a real number.
-  const isPositive = isFiniteNumber(stock.changePercent) ? stock.changePercent >= 0 : true;
-  const trendColor = isPositive ? '#00D09C' : '#EB5757';
-
-  // NIFTY 50 / SENSEX are benchmarks: quoted, charted, but not buyable as a
-  // share. Offering BUY on them led students into an order that cannot exist.
-  const isTradable = !isIndexSymbol(stock.symbol);
+const StockEmblemBadge: React.FC<{ symbol: string; logoUrl?: string }> = ({ symbol, logoUrl }) => {
+  const [imageError, setImageError] = useState(false);
 
   const getStockEmblem = (sym: string) => {
     if (sym.includes('RELIANCE')) return { bg: '#0284C7', text: 'RIL' };
@@ -42,7 +31,40 @@ export const StockCard: React.FC<StockCardProps> = ({
     return { bg: '#00D09C', text: sym.slice(0, 3) };
   };
 
-  const emblem = getStockEmblem(stock.symbol);
+  const emblem = getStockEmblem(symbol);
+
+  if (logoUrl && !imageError) {
+    return (
+      <View style={styles.logoBox}>
+        <Image
+          source={{ uri: logoUrl }}
+          style={styles.logoImage}
+          onError={() => setImageError(true)}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.emblemBox, { backgroundColor: emblem.bg }]}>
+      <Text style={styles.emblemText}>{emblem.text}</Text>
+    </View>
+  );
+};
+
+export const StockCard: React.FC<StockCardProps> = ({
+  stock,
+  heldShares = 0,
+  onTradePress,
+  onCardPress,
+}) => {
+  // An unknown change must not read as a gain, so require a real number.
+  const isPositive = isFiniteNumber(stock.changePercent) ? stock.changePercent >= 0 : true;
+  const trendColor = isPositive ? '#00D09C' : '#EB5757';
+
+  // NIFTY 50 / SENSEX are benchmarks: quoted, charted, but not buyable as a
+  // share. Offering BUY on them led students into an order that cannot exist.
+  const isTradable = !isIndexSymbol(stock.symbol);
 
   return (
     <TouchableOpacity
@@ -52,9 +74,7 @@ export const StockCard: React.FC<StockCardProps> = ({
     >
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
-          <View style={[styles.emblemBox, { backgroundColor: emblem.bg }]}>
-            <Text style={styles.emblemText}>{emblem.text}</Text>
-          </View>
+          <StockEmblemBadge symbol={stock.symbol} logoUrl={stock.logoUrl} />
           <View style={{ flex: 1 }}>
             <View style={styles.symbolRow}>
               <Text style={styles.symbol}>{stock.symbol}</Text>
@@ -200,6 +220,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  logoBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  logoImage: {
+    width: 26,
+    height: 26,
+    resizeMode: 'contain',
   },
   emblemText: {
     fontSize: 12,

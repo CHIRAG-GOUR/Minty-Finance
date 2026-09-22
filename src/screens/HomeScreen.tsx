@@ -96,7 +96,7 @@ export const HomeScreen: React.FC = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Indices</Text>
-            <TouchableOpacity activeOpacity={0.7} onPress={() => setActiveTab('markets')}>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => setActiveTab('invest')}>
               <Text style={styles.seeAllText}>All Equities →</Text>
             </TouchableOpacity>
           </View>
@@ -180,7 +180,7 @@ export const HomeScreen: React.FC = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Watchlist</Text>
-            <TouchableOpacity activeOpacity={0.7} onPress={() => setActiveTab('markets')}>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => setActiveTab('invest')}>
               <Text style={styles.seeAllText}>Explore →</Text>
             </TouchableOpacity>
           </View>
@@ -231,7 +231,7 @@ export const HomeScreen: React.FC = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Top Movers</Text>
-            <TouchableOpacity activeOpacity={0.7} onPress={() => setActiveTab('markets')}>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => setActiveTab('invest')}>
               <Text style={styles.seeAllText}>View All →</Text>
             </TouchableOpacity>
           </View>

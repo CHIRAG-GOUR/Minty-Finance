@@ -35,42 +35,32 @@ import { FundInvestModal } from './src/screens/FundInvestModal';
 import { FDCreateModal } from './src/screens/FDCreateModal';
 import { LevelInfoModal } from './src/screens/LevelInfoModal';
 import { CompoundCalculatorModal } from './src/screens/CompoundCalculatorModal';
+import { MutualFundsScreen } from './src/screens/MutualFundsScreen';
 import { TabType } from './src/types';
 
 /** Label used by the boundary fallback for whichever tab is showing. */
 const SCREEN_LABELS: Record<string, string> = {
   home: 'The home dashboard',
-  markets: 'The markets list',
-  wealth_lab: 'The wealth lab',
-  shark_tank: 'Shark Tank',
-  classroom: 'The classroom',
-  admin_control: 'The admin desk',
-  profile: 'Your profile',
-  learn: 'The learn hub',
+  invest: 'Stocks trading floor',
+  markets: 'Mutual Funds & FDs',
+  shark_tank: 'Startup pitch arena',
   portfolio: 'Your portfolio',
+  profile: 'Your profile',
   rewards: 'Rewards',
 };
 
 const ActiveScreen: React.FC<{ tab: TabType }> = ({ tab }) => {
   switch (tab) {
-    case 'markets':
     case 'invest':
       return <InvestScreen />;
-    case 'wealth_lab':
-    case 'budget':
-      return <BudgetScreen />;
-    case 'shark_tank':
-      return <SharkTankScreen />;
-    case 'classroom':
-      return <ClassroomScreen />;
-    case 'admin_control':
-      return <AdminControlScreen />;
-    case 'profile':
-      return <ProfileScreen />;
-    case 'learn':
-      return <LearnScreen />;
+    case 'markets':
+      return <MutualFundsScreen />;
     case 'portfolio':
       return <PortfolioScreen />;
+    case 'shark_tank':
+      return <SharkTankScreen />;
+    case 'profile':
+      return <ProfileScreen />;
     case 'rewards':
       return <RewardsScreen />;
     case 'home':

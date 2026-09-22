@@ -207,6 +207,7 @@ export interface StockItem {
   roe?: number;
   debtToEquity?: number;
   dividendYield: number;
+  logoUrl?: string;
   dataFreshness?: DataFreshness;
   lastTradedTime?: string;
   sparkline: number[];
@@ -223,6 +224,7 @@ export interface MutualFundItem {
   name: string;
   amc?: string;
   category: string;
+  logoUrl?: string;
   nav: number;
   navChange?: number;
   navChangePercent?: number;

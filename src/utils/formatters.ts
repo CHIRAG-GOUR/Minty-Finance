@@ -157,3 +157,28 @@ export function toWidthPercent(value: unknown, min: number = 0, max: number = 10
   const clamped = n === null ? min : Math.min(max, Math.max(min, n));
   return `${Math.round(clamped * 100) / 100}%`;
 }
+
+/**
+ * Formats historical candle ISO timestamps into authentic, human-readable chart dates/times.
+ */
+export function formatCandleDate(isoTimestamp: unknown, timeframe: string = '1D'): string {
+  if (typeof isoTimestamp !== 'string' || !isoTimestamp) return '';
+  try {
+    const d = new Date(isoTimestamp);
+    if (!isFiniteNumber(d.getTime())) return '';
+    const tf = (timeframe || '1D').toUpperCase();
+    if (tf === '1D') {
+      return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    }
+    if (tf === '1W') {
+      return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+    }
+    if (tf === '1M' || tf === '3M' || tf === '6M') {
+      return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    }
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch {
+    return '';
+  }
+}
+

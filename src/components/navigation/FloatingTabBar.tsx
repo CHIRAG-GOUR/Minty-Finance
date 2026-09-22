@@ -20,12 +20,10 @@ interface TabItem {
 }
 
 export const FloatingTabBar: React.FC = () => {
-  const { activeTab, setActiveTab, userProfile, openModal } = useApp();
+  const { activeTab, setActiveTab } = useApp();
   const centerBtnScale = useRef(new Animated.Value(1)).current;
   const insets = useSafeAreaInsets();
 
-  // A fixed 16px offset put the dock inside the gesture-navigation strip on
-  // phones with a nav bar, so the system swallowed taps meant for the tabs.
   const dockBottom = insets.bottom > 0 ? insets.bottom + 8 : Platform.OS === 'ios' ? 24 : 16;
 
   const handlePressIn = () => {
@@ -44,56 +42,27 @@ export const FloatingTabBar: React.FC = () => {
     }).start();
   };
 
-  const getTabsForRole = (): { leftTabs: TabItem[]; rightTabs: TabItem[] } => {
-    if (userProfile.role === 'teacher') {
-      return {
-        leftTabs: [
-          { id: 'classroom', label: 'Cohorts', iconName: 'learn' },
-          { id: 'markets', label: 'Markets', iconName: 'invest' },
-        ],
-        rightTabs: [
-          { id: 'shark_tank', label: 'Startups', iconName: 'rocket' },
-          { id: 'profile', label: 'Mentor', iconName: 'user' },
-        ],
-      };
-    }
+  // 1st: Portfolio, 2nd: Stocks | CENTER: Home | 4th: Mutual Funds, 5th: Startup
+  const leftTabs: TabItem[] = [
+    { id: 'portfolio', label: 'Portfolio', iconName: 'pie-chart' },
+    { id: 'invest', label: 'Stocks', iconName: 'stocks' },
+  ];
 
-    if (userProfile.role === 'super_admin') {
-      return {
-        leftTabs: [
-          { id: 'admin_control', label: 'Desk', iconName: 'settings' },
-          { id: 'markets', label: 'Assets', iconName: 'invest' },
-        ],
-        rightTabs: [
-          { id: 'classroom', label: 'Schools', iconName: 'learn' },
-          { id: 'profile', label: 'Admin', iconName: 'user' },
-        ],
-      };
-    }
+  const rightTabs: TabItem[] = [
+    { id: 'markets', label: 'Mutual Funds', iconName: 'funds' },
+    { id: 'shark_tank', label: 'Startup', iconName: 'rocket' },
+  ];
 
-    // Student tabs
-    return {
-      leftTabs: [
-        { id: 'home', label: 'Home', iconName: 'home' },
-        { id: 'markets', label: 'Trade', iconName: 'invest' },
-      ],
-      rightTabs: [
-        { id: 'wealth_lab', label: 'Wealth', iconName: 'budget' },
-        { id: 'shark_tank', label: 'Startups', iconName: 'rocket' },
-      ],
-    };
-  };
-
-  const { leftTabs, rightTabs } = getTabsForRole();
+  const isHomeActive = activeTab === 'home';
 
   return (
     <View
       style={[styles.floatingWrapper, { bottom: dockBottom }]}
       pointerEvents="box-none"
     >
-      {/* Floating Obsidian Curved Dock (Inspired by Reference UI) */}
+      {/* Floating Obsidian Curved Dock */}
       <View style={styles.dockContainer}>
-        {/* Left Tabs */}
+        {/* Left Tabs: Portfolio & Stocks */}
         {leftTabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -121,22 +90,31 @@ export const FloatingTabBar: React.FC = () => {
           );
         })}
 
-        {/* Center Sunburst Yellow Audio Waveform Button (Zero Lightning SVG, Exact Reference Image 1 Soundwave) */}
+        {/* Center Hero Home Button — Takes user directly back to Start / Home Dashboard */}
         <Animated.View style={{ transform: [{ scale: centerBtnScale }] }}>
           <TouchableOpacity
             activeOpacity={0.9}
             onPressIn={handlePressIn}
             onPressOut={handlePressOut}
-            onPress={() => openModal('quick_action_terminal')}
-            style={styles.heroCenterBtn}
+            onPress={() => setActiveTab('home')}
+            style={[
+              styles.heroCenterBtn,
+              isHomeActive && styles.heroCenterBtnActive,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Home"
           >
             <View style={styles.heroCenterInner}>
-              <Icon name="waveform" size={28} color={THEME.colors.obsidian} />
+              <Icon
+                name="home"
+                size={26}
+                color={isHomeActive ? THEME.colors.obsidian : '#1E293B'}
+              />
             </View>
           </TouchableOpacity>
         </Animated.View>
 
-        {/* Right Tabs */}
+        {/* Right Tabs: Mutual Funds & Startup */}
         {rightTabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -172,8 +150,8 @@ const styles = StyleSheet.create({
   floatingWrapper: {
     position: 'absolute',
     bottom: Platform.OS === 'ios' ? 24 : 16,
-    left: 20,
-    right: 20,
+    left: 16,
+    right: 16,
     alignItems: 'center',
     zIndex: 999,
   },
@@ -185,7 +163,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     borderColor: 'rgba(255, 255, 255, 0.12)',
     borderWidth: 1.5,
     ...THEME.shadows.floatingBar,
@@ -197,10 +175,10 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   tabLabel: {
-    fontSize: 10,
+    fontSize: 9.5,
     marginTop: 3,
     fontWeight: '800',
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
   tabLabelActive: {
     color: THEME.colors.accentYellow,
@@ -209,16 +187,21 @@ const styles = StyleSheet.create({
     color: THEME.colors.textMuted,
   },
   heroCenterBtn: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: THEME.colors.accentYellow,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -30,
+    marginTop: -28,
     borderWidth: 4,
     borderColor: THEME.colors.obsidian,
     ...THEME.shadows.yellowGlow,
+  },
+  heroCenterBtnActive: {
+    backgroundColor: THEME.colors.accentYellow,
+    borderColor: '#FFFFFF',
+    transform: [{ scale: 1.05 }],
   },
   heroCenterInner: {
     alignItems: 'center',

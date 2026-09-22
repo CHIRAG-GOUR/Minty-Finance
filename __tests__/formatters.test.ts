@@ -9,6 +9,7 @@ import {
   formatQuantity,
   formatSignedCurrency,
   formatTime,
+  formatCandleDate,
   formatXP,
   toWidthPercent,
   UNAVAILABLE,
@@ -30,6 +31,7 @@ describe('formatters', () => {
       expect(() => formatDate(v as string)).not.toThrow();
       expect(() => formatDateTime(v as string)).not.toThrow();
       expect(() => formatTime(v as string)).not.toThrow();
+      expect(() => formatCandleDate(v as string)).not.toThrow();
       expect(() => toWidthPercent(v as number)).not.toThrow();
     }
   });
@@ -78,5 +80,6 @@ describe('formatters', () => {
     expect(formatDateTime('not-a-date')).toBe(UNAVAILABLE);
     expect(formatTime('')).toBe(UNAVAILABLE);
     expect(formatDate(new Date('2026-01-15').toISOString())).toContain('2026');
+    expect(formatCandleDate('2026-03-15T09:30:00.000Z', '1D')).toBeTruthy();
   });
 });

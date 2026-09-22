@@ -86,17 +86,17 @@ function labelFor(index: number, count: number, timeframe: GrowwTimeframe): stri
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
     return index === count - 1 ? 'Today' : days[index % days.length];
   }
-  if (timeframe === '1M' || timeframe === '6M') {
+  if (timeframe === '1M' || timeframe === '6M' || count <= 15) {
     return index === count - 1 ? 'Today' : `Day ${index + 1}`;
   }
-  const months = ['Jan', 'Mar', 'May', 'Jul', 'Sep', 'Nov'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return index === count - 1 ? 'Today' : months[index % months.length];
 }
 
 export const GrowwInteractiveChart: React.FC<GrowwInteractiveChartProps> = ({
   data,
   currentPrice,
-  timeframe = '1Y',
+  timeframe = '1D',
   onTimeframeChange,
   height = 220,
   isMutualFund = false,
