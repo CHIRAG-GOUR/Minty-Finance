@@ -20,13 +20,16 @@ interface AddStockModalProps {
 
 export const AddStockModal: React.FC<AddStockModalProps> = ({ visible, onClose }) => {
   const { addNewStockToMarket, showToast } = useApp();
-  if (!visible) return null;
 
+  // Hooks must run on every render. Returning early above them changes the hook
+  // count between the hidden and visible renders, which React treats as fatal.
   const [symbol, setSymbol] = useState('');
   const [name, setName] = useState('');
   const [sector, setSector] = useState('');
   const [price, setPrice] = useState('150.00');
   const [risk, setRisk] = useState<RiskLevel>('Moderate');
+
+  if (!visible) return null;
 
   const handleCreate = async () => {
     if (!symbol.trim() || !name.trim()) return;
@@ -65,7 +68,7 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({ visible, onClose }
       subtitle="Super Admin Exchange Listing Desk"
       iconName="plus"
     >
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+      <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Stock Ticker Symbol</Text>
           <TextInput

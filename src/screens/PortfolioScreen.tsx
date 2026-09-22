@@ -62,6 +62,7 @@ export const PortfolioScreen: React.FC = () => {
       </View>
 
       <ScrollView
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >

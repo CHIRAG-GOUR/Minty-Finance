@@ -112,16 +112,20 @@ export const InvestScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Market Trading Floor</Text>
-          <Text style={styles.subtitle}>
+        <View style={styles.headerTitleBlock}>
+          <Text style={styles.title} numberOfLines={1}>
+            Market Trading Floor
+          </Text>
+          <Text style={styles.subtitle} numberOfLines={2}>
             Real Indian market feeds · Virtual ₹1,00,000 practice capital
           </Text>
         </View>
 
         <View style={styles.cashBadge}>
           <Text style={styles.cashBadgeLabel}>Cash</Text>
-          <Text style={styles.cashBadgeAmount}>{formatCurrency(wallet.cashBalance)}</Text>
+          <Text style={styles.cashBadgeAmount} numberOfLines={1}>
+            {formatCurrency(wallet.cashBalance)}
+          </Text>
         </View>
       </View>
 
@@ -157,6 +161,7 @@ export const InvestScreen: React.FC = () => {
       </View>
 
       <ScrollView
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
@@ -183,6 +188,7 @@ export const InvestScreen: React.FC = () => {
 
             {/* Filter Chips Horizontal Scroll */}
             <ScrollView
+              keyboardShouldPersistTaps="handled"
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.filterChipsScroll}
@@ -499,6 +505,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: THEME.spacing.lg,
     paddingTop: THEME.spacing.sm,
     paddingBottom: THEME.spacing.xs,
+    gap: 12,
+  },
+  /**
+   * React Native defaults flexShrink to 0, so without this the long subtitle
+   * kept its intrinsic width and pushed the cash badge off the right edge.
+   */
+  headerTitleBlock: {
+    flex: 1,
+    minWidth: 0,
   },
   title: {
     ...THEME.typography.h2,
@@ -515,6 +530,8 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: THEME.radii.pill,
     alignItems: 'flex-end',
+    flexShrink: 0,
+    maxWidth: '45%',
   },
   cashBadgeLabel: {
     fontSize: 9,

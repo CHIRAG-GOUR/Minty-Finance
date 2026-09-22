@@ -25,11 +25,14 @@ export const RoleSelectorModal: React.FC<RoleSelectorModalProps> = ({
   onClose,
 }) => {
   const { userProfile, switchUserRole, showToast } = useApp();
-  if (!visible) return null;
 
+  // Hooks first: an early return above them changes the hook count between the
+  // hidden and visible renders, which React treats as fatal.
   const [activeMode, setActiveMode] = useState<'quick_switch' | 'login'>('quick_switch');
   const [emailInput, setEmailInput] = useState('pa1@skillizee.io');
   const [passInput, setPassInput] = useState('787700');
+
+  if (!visible) return null;
 
   const handleSelectRole = async (role: UserRole) => {
     await switchUserRole(role);
@@ -88,7 +91,7 @@ export const RoleSelectorModal: React.FC<RoleSelectorModalProps> = ({
       subtitle="Role-Based Access Control (RBAC)"
       iconName="shield"
     >
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.container}>
+      <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.container}>
         {/* Toggle Mode */}
         <View style={styles.tabToggle}>
           <TouchableOpacity

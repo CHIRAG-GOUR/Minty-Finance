@@ -25,12 +25,15 @@ export const CompoundCalculatorModal: React.FC<CompoundCalculatorModalProps> = (
   onClose,
 }) => {
   const { wallet, showToast, recordCompoundSimulation, setActiveTab } = useApp();
-  if (!visible) return null;
 
+  // Hooks first: an early return above them changes the hook count between the
+  // hidden and visible renders, which React treats as fatal.
   const [initialInvestment, setInitialInvestment] = useState(25000);
   const [monthlySIP, setMonthlySIP] = useState(5000);
   const [expectedReturn, setExpectedReturn] = useState(13.5);
   const [timeHorizonYears, setTimeHorizonYears] = useState(15);
+
+  if (!visible) return null;
 
   const result = calculateCompoundGrowth(
     initialInvestment,
@@ -63,7 +66,7 @@ export const CompoundCalculatorModal: React.FC<CompoundCalculatorModalProps> = (
       subtitle="The 8th Wonder of the World — Long-Term Wealth Multiplier"
       iconName="growth"
     >
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.container}>
+      <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.container}>
         {/* Big Result Card */}
         <View style={styles.resultCard}>
           <Text style={styles.resultLabel}>Projected Future Wealth</Text>

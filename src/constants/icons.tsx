@@ -13,6 +13,10 @@ import {
   Sparkles,
   ArrowUpRight,
   ArrowDownRight,
+  ArrowDownLeft,
+  ArrowUpLeft,
+  Bookmark,
+  BookmarkCheck,
   CheckCircle2,
   AlertCircle,
   Clock,
@@ -109,6 +113,15 @@ export const Icon: React.FC<IconProps> = ({
       return <ArrowUpRight size={size} color={color} {...rest} />;
     case 'arrow-down-right':
       return <ArrowDownRight size={size} color={color} {...rest} />;
+    case 'arrow-down-left':
+      return <ArrowDownLeft size={size} color={color} {...rest} />;
+    case 'arrow-up-left':
+      return <ArrowUpLeft size={size} color={color} {...rest} />;
+    case 'bookmark':
+      return <Bookmark size={size} color={color} {...rest} />;
+    case 'bookmark-filled':
+    case 'watchlisted':
+      return <BookmarkCheck size={size} color={color} {...rest} />;
     case 'success':
     case 'check-circle':
       return <CheckCircle2 size={size} color={color} {...rest} />;

@@ -134,7 +134,7 @@ export const OnboardingScreen: React.FC = () => {
         </View>
 
         {!showNameInput ? (
-          <ScrollView contentContainerStyle={styles.slideContent} showsVerticalScrollIndicator={false}>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.slideContent} showsVerticalScrollIndicator={false}>
             {/* Visual Icon Emblem */}
             <View style={[styles.slideEmblem, { backgroundColor: `${slide.accentColor}15`, borderColor: slide.accentColor }]}>
               <Icon name={slide.iconName} size={48} color={slide.accentColor} />
@@ -162,7 +162,7 @@ export const OnboardingScreen: React.FC = () => {
             </View>
           </ScrollView>
         ) : (
-          <ScrollView contentContainerStyle={styles.nameSetupContent} showsVerticalScrollIndicator={false}>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.nameSetupContent} showsVerticalScrollIndicator={false}>
             <View style={styles.setupEmblem}>
               <Icon name="rocket" size={44} color={THEME.colors.primary} />
             </View>

@@ -92,6 +92,7 @@ export const AIAdvisorModal: React.FC<AIAdvisorModalProps> = ({ visible, onClose
         style={styles.container}
       >
         <ScrollView
+          keyboardShouldPersistTaps="handled"
           style={styles.chatScroll}
           contentContainerStyle={styles.chatContent}
           showsVerticalScrollIndicator={false}

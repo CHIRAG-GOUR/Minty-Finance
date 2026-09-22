@@ -46,6 +46,7 @@ export const ClassroomScreen: React.FC = () => {
 
       {/* Cohort Selector Tabs */}
       <ScrollView
+        keyboardShouldPersistTaps="handled"
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.cohortTabs}
@@ -78,6 +79,7 @@ export const ClassroomScreen: React.FC = () => {
       </ScrollView>
 
       <ScrollView
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >

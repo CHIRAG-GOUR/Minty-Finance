@@ -124,7 +124,6 @@ export const HomeScreen: React.FC = () => {
                       { color: nifty.changePercent >= 0 ? '#00D09C' : THEME.colors.coral },
                     ]}
                   >
-                    {nifty.changePercent >= 0 ? '+' : ''}
                     {formatPercentage(nifty.changePercent)}
                   </Text>
                 </View>
@@ -161,7 +160,6 @@ export const HomeScreen: React.FC = () => {
                       { color: sensex.changePercent >= 0 ? '#00D09C' : THEME.colors.coral },
                     ]}
                   >
-                    {sensex.changePercent >= 0 ? '+' : ''}
                     {formatPercentage(sensex.changePercent)}
                   </Text>
                 </View>
@@ -220,7 +218,6 @@ export const HomeScreen: React.FC = () => {
                         { color: isPos ? '#16A34A' : THEME.colors.coral },
                       ]}
                     >
-                      {isPos ? '+' : ''}
                       {formatPercentage(stock.changePercent)}
                     </Text>
                   </View>
@@ -272,7 +269,6 @@ export const HomeScreen: React.FC = () => {
                       },
                     ]}
                   >
-                    {stock.changePercent >= 0 ? '+' : ''}
                     {formatPercentage(stock.changePercent)}
                   </Text>
                 </View>
@@ -408,7 +404,9 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.colors.background,
   },
   scrollContent: {
-    paddingBottom: 40,
+    // Must clear the floating dock (66px tall plus its bottom offset), or the
+    // last card sits permanently behind the tab bar and cannot be reached.
+    paddingBottom: 120,
   },
   // Market Status - clean flat bar, no green pill
   marketStatusBar: {

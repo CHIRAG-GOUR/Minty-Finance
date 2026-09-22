@@ -9,6 +9,7 @@ import {
   Platform,
   TouchableWithoutFeedback,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { THEME } from '../../constants/theme';
 import { Icon } from '../../constants/icons';
 
@@ -29,7 +30,21 @@ export const ModalWrapper: React.FC<ModalWrapperProps> = ({
   iconName,
   children,
 }) => {
+  // Hook first: returning before it would change this component's hook count
+  // between renders, which is fatal on Android ("Rendered more hooks than
+  // during the previous render") and is what closed the app on a stock tap.
+  const insets = useSafeAreaInsets();
+
   if (!visible) return null;
+
+  // A sheet that ends flush with the screen puts its own footer inside the
+  // Android gesture-navigation strip, where the system eats the touches: the
+  // Buy/Sell bar rendered but could not be pressed. Reserve the real inset.
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 16);
+
+  // Sheets that build their own rich header pass an empty title; drawing the
+  // bar anyway wasted ~100px of vertical space above the fold.
+  const hasHeaderText = title.trim() !== '' || (subtitle ?? '').trim() !== '';
 
   return (
     <Modal
@@ -48,20 +63,22 @@ export const ModalWrapper: React.FC<ModalWrapperProps> = ({
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.sheetWrapper}
         >
-          <View style={styles.sheetContainer}>
-            <View style={styles.header}>
+          <View style={[styles.sheetContainer, { paddingBottom: bottomInset }]}>
+            <View style={[styles.header, !hasHeaderText && styles.headerBare]}>
               <View style={styles.headerLeft}>
-                {iconName ? (
+                {iconName && hasHeaderText ? (
                   <View style={styles.iconBox}>
                     <Icon name={iconName} size={18} color={THEME.colors.obsidian} />
                   </View>
                 ) : null}
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.title} numberOfLines={1}>
-                    {title}
-                  </Text>
+                  {title.trim() !== '' ? (
+                    <Text style={styles.title} numberOfLines={2}>
+                      {title}
+                    </Text>
+                  ) : null}
                   {subtitle ? (
-                    <Text style={styles.subtitle} numberOfLines={1}>
+                    <Text style={styles.subtitle} numberOfLines={2}>
                       {subtitle}
                     </Text>
                   ) : null}
@@ -71,6 +88,9 @@ export const ModalWrapper: React.FC<ModalWrapperProps> = ({
                 activeOpacity={0.7}
                 onPress={onClose}
                 style={styles.closeButton}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Icon name="close" size={16} color={THEME.colors.obsidian} />
               </TouchableOpacity>
@@ -102,7 +122,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: THEME.radii.xl,
     borderTopRightRadius: THEME.radii.xl,
     maxHeight: '88%',
-    paddingBottom: Platform.OS === 'ios' ? 24 : 16,
     ...THEME.shadows.elevated,
   },
   header: {
@@ -113,6 +132,11 @@ const styles = StyleSheet.create({
     paddingVertical: THEME.spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: THEME.colors.cardBorder,
+  },
+  /** Title-less sheets keep only a compact close affordance. */
+  headerBare: {
+    paddingVertical: THEME.spacing.sm,
+    borderBottomWidth: 0,
   },
   headerLeft: {
     flexDirection: 'row',

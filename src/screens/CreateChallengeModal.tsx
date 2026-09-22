@@ -90,12 +90,13 @@ export const CreateChallengeModal: React.FC = () => {
           </View>
 
           <ScrollView
+            keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.formContent}
           >
             {/* Target Cohort */}
             <Text style={styles.fieldLabel}>Target Student Cohort</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cohortSelector}>
+            <ScrollView keyboardShouldPersistTaps="handled" horizontal showsHorizontalScrollIndicator={false} style={styles.cohortSelector}>
               {cohorts.map((c) => (
                 <TouchableOpacity
                   key={c.id}

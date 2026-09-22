@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,203 +11,386 @@ import {
 import { THEME } from '../constants/theme';
 import { Icon } from '../constants/icons';
 import { ModalWrapper } from '../components/common/ModalWrapper';
-import { StockItem, StockHolding, HistoricalCandle } from '../types';
-import { formatCurrency, formatPercentage, formatCompactCurrency } from '../utils/formatters';
+import { ErrorBoundary } from '../components/common/ErrorBoundary';
+import { EmptyState, ErrorState, LoadingState } from '../components/common/StateViews';
+import {
+  formatCurrency,
+  formatCurrencyOrDash,
+  formatCompactNumber,
+  formatPercentage,
+  formatQuantity,
+  formatSignedCurrency,
+  toWidthPercent,
+  UNAVAILABLE,
+} from '../utils/formatters';
 import { useApp } from '../context/AppContext';
 import { EDUCATIONAL_METRICS, PRE_INVESTMENT_CHECKLIST_ITEMS } from '../constants/mockData';
-import { MarketDataService } from '../services/marketDataService';
 import { GrowwInteractiveChart, GrowwTimeframe } from '../components/charts/GrowwInteractiveChart';
 import { GrowwCandleChart } from '../components/charts/GrowwCandleChart';
+import { resolveInstrument } from '../services/instrumentResolver';
+import { useHistoricalCandles, ChartRange } from '../hooks/useHistoricalCandles';
+import { PortfolioEngine } from '../services/portfolioEngine';
+import { isFiniteNumber, safePercent, toFiniteNumber, clamp } from '../utils/safeNumber';
 
 interface StockTradeModalProps {
   visible: boolean;
-  data: {
-    stock: StockItem;
-    action?: 'buy' | 'sell';
-    holding?: StockHolding;
-  } | null;
+  /** Route parameters. May be null, partial, or carry a stale stock snapshot. */
+  data: unknown;
   onClose: () => void;
 }
 
-export const StockTradeModal: React.FC<StockTradeModalProps> = ({
-  visible,
-  data,
-  onClose,
-}) => {
+const TIMEFRAME_TO_RANGE: Record<GrowwTimeframe, ChartRange> = {
+  '1D': '1D',
+  '1W': '1W',
+  '1M': '1M',
+  '6M': '6M',
+  '1Y': '1Y',
+  '3Y': '3Y',
+  '5Y': '5Y',
+  ALL: 'MAX',
+};
+
+const POSITIVE = '#00D09C';
+const NEGATIVE = '#EB5757';
+
+function getStockEmblem(sym: string): { bg: string; text: string } {
+  const s = (sym || '').toUpperCase();
+  if (s.includes('RELIANCE')) return { bg: '#0284C7', text: 'RIL' };
+  if (s.includes('TCS')) return { bg: '#1E3A8A', text: 'TCS' };
+  if (s.includes('HDFC')) return { bg: '#DC2626', text: 'HDFC' };
+  if (s.includes('INFY')) return { bg: '#0284C7', text: 'INFY' };
+  if (s.includes('ICICI')) return { bg: '#D97706', text: 'ICICI' };
+  if (s.includes('SBIN')) return { bg: '#0D9488', text: 'SBI' };
+  if (s.includes('BHARTI')) return { bg: '#E11D48', text: 'AIR' };
+  if (s.includes('ITC')) return { bg: '#7C3AED', text: 'ITC' };
+  if (s.includes('TATAMOTORS') || s.includes('TATA')) return { bg: '#0369A1', text: 'TATA' };
+  return { bg: POSITIVE, text: s.slice(0, 3) || '—' };
+}
+
+const StockTradeModalBody: React.FC<StockTradeModalProps> = ({ visible, data, onClose }) => {
   const {
     wallet,
+    stockCatalog,
+    stockHoldings,
+    marketStatus,
     buyStock,
     sellStock,
     calculateCharges,
     toggleWatchlist,
     isWatchlisted,
     showToast,
+    setActiveTab,
   } = useApp();
 
+  // ---------------------------------------------------------------------------
+  // Hooks. Every hook below runs on EVERY render, including while the modal is
+  // hidden. Returning early above any of them changes the hook count between
+  // renders, which React treats as fatal ("Rendered more hooks than during the
+  // previous render") and which took the whole app down when a stock was tapped.
+  // ---------------------------------------------------------------------------
   const [activeAction, setActiveAction] = useState<'buy' | 'sell'>('buy');
-  const [shares, setShares] = useState<number>(5);
+  const [shares, setShares] = useState<number>(1);
   const [selectedTimeframe, setSelectedTimeframe] = useState<GrowwTimeframe>('1D');
   const [isCandleMode, setIsCandleMode] = useState<boolean>(false);
   const [expandedMetric, setExpandedMetric] = useState<string | null>(null);
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [candles, setCandles] = useState<HistoricalCandle[]>([]);
 
+  // Resolve against the LIVE catalog every render, so the header price, the
+  // chart and the position all move together on each market tick and stay
+  // correct after a buy or sell. The snapshot handed over by the tapped card is
+  // only a fallback for the first frame.
+  const resolution = useMemo(
+    () => resolveInstrument(data, stockCatalog, stockHoldings),
+    [data, stockCatalog, stockHoldings]
+  );
+
+  const stock = resolution.ok ? resolution.stock : null;
+  const instrument = resolution.ok ? resolution.instrument : null;
+  const holding = resolution.ok ? resolution.holding : null;
+  const symbol = instrument?.symbol ?? null;
+
+  // Only fetch while the sheet is actually on screen; re-entering a stock
+  // reuses this same hook rather than stacking listeners or duplicate requests.
+  const chartRange = TIMEFRAME_TO_RANGE[selectedTimeframe] ?? '1D';
+  const { candles, series, status: chartStatus, retry: retryChart } = useHistoricalCandles(
+    visible ? symbol : null,
+    chartRange
+  );
+
+  // Reset per-instrument UI state when a different stock is opened.
   useEffect(() => {
-    if (data?.action) {
-      setActiveAction(data.action);
-    }
-    setShares(5);
+    if (!visible) return;
+    setShares(1);
+    setExpandedMetric(null);
+    setCheckedItems({});
+    setIsCandleMode(false);
+    setSelectedTimeframe('1D');
+  }, [visible, symbol]);
+
+  // Honour an explicitly requested action (Buy More / Sell Position).
+  useEffect(() => {
+    const requested =
+      data && typeof data === 'object' ? (data as { action?: unknown }).action : undefined;
+    if (requested === 'buy' || requested === 'sell') setActiveAction(requested);
   }, [data]);
 
-  // Fetch real multi-timeframe historical series for chart
-  useEffect(() => {
-    if (data?.stock?.symbol) {
-      const tfMap: Record<GrowwTimeframe, '1D' | '1W' | '1M' | '3M' | '1Y' | '5Y'> = {
-        '1D': '1D',
-        '1W': '1W',
-        '1M': '1M',
-        '6M': '3M',
-        '1Y': '1Y',
-        '3Y': '5Y',
-        '5Y': '5Y',
-        'ALL': '5Y',
-      };
-      MarketDataService.getHistoricalCandles(data.stock.symbol, tfMap[selectedTimeframe] || '1D').then(
-        (dataPoints) => {
-          if (dataPoints && dataPoints.length > 0) {
-            setCandles(dataPoints);
-          }
-        }
-      );
-    }
-  }, [data?.stock?.symbol, selectedTimeframe]);
+  const position = useMemo(
+    () => PortfolioEngine.calculateHolding(holding, stock),
+    [holding, stock]
+  );
 
-  if (!visible || !data || !data.stock) return null;
+  // Fall back to the packaged range series only when the provider has nothing,
+  // so a chart still draws offline instead of showing an error for known data.
+  const fallbackSeries = useMemo(() => {
+    if (!stock) return [];
+    const byTimeframe: Partial<Record<GrowwTimeframe, number[] | undefined>> = {
+      '1D': stock.historical1D,
+      '1W': stock.historical1W,
+      '1M': stock.historical1M,
+      '6M': stock.historical1M,
+      '1Y': stock.historical1Y,
+      '3Y': stock.historical5Y ?? stock.historical1Y,
+      '5Y': stock.historical5Y ?? stock.historical1Y,
+      ALL: stock.historical5Y ?? stock.historical1Y,
+    };
+    const picked = byTimeframe[selectedTimeframe] ?? stock.sparkline;
+    return Array.isArray(picked) ? picked.filter(isFiniteNumber) : [];
+  }, [stock, selectedTimeframe]);
 
-  const { stock, holding } = data;
-  const isBuy = activeAction === 'buy';
-  const heldShares = holding?.shares || 0;
-  const inWatchlist = isWatchlisted(stock.symbol);
+  const chartSeries = series.length >= 2 ? series : fallbackSeries;
+  const chartHasData = chartSeries.length >= 2;
 
-  const grossValue = parseFloat((stock.currentPrice * shares).toFixed(2));
-  const charges = calculateCharges(grossValue, isBuy);
-  const netTotal = isBuy
-    ? parseFloat((grossValue + charges.totalCharges).toFixed(2))
-    : parseFloat((grossValue - charges.totalCharges).toFixed(2));
+  const price = stock && isFiniteNumber(stock.currentPrice) ? stock.currentPrice : null;
+  const isPriced = price !== null && price > 0;
+  const heldShares = position.shares;
 
-  const maxBuyShares = Math.max(0, Math.floor(wallet.cashBalance / stock.currentPrice));
-  const maxShares = isBuy ? maxBuyShares : heldShares;
+  const grossValue = isPriced ? price * shares : 0;
+  const charges = useMemo(
+    () => calculateCharges(grossValue, activeAction === 'buy'),
+    [calculateCharges, grossValue, activeAction]
+  );
 
-  const isPos = stock.changePercent >= 0;
-  const themeColor = isPos ? '#00D09C' : '#EB5757';
-
-  const handleShare = async () => {
+  const handleShare = useCallback(async () => {
+    if (!stock) return;
     try {
       await Share.share({
-        message: `Tracking ${stock.name} (${stock.symbol}) on Minti Finance. Current Price: ₹${stock.currentPrice} (${stock.changePercent > 0 ? '+' : ''}${stock.changePercent}%).`,
+        message: `Tracking ${stock.name} (${stock.symbol}) on Minti Finance. Current price: ${formatCurrencyOrDash(
+          price,
+          true
+        )} (${formatPercentage(stock.changePercent)}).`,
       });
-    } catch (e) {
-      // ignore
+    } catch {
+      // The user dismissing the share sheet is not an error worth surfacing.
     }
-  };
+  }, [stock, price]);
 
-  const handleExecute = async () => {
+  const toggleChecklist = useCallback((id: string) => {
+    setCheckedItems((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // Render-time guards. Safe here: no hook runs below this point.
+  // ---------------------------------------------------------------------------
+  if (!visible) return null;
+
+  if (!resolution.ok || !stock || !instrument) {
+    const notFound = resolution.ok === false && resolution.reason === 'not-found';
+    return (
+      <ModalWrapper visible={visible} onClose={onClose} title="Investment" iconName="stocks">
+        <ErrorState
+          title="Unable to open this investment."
+          message={
+            notFound
+              ? `${
+                  (resolution as { requested: string | null }).requested ?? 'This instrument'
+                } is not in the current market list. It may have been delisted or the market data is still loading.`
+              : 'This investment was opened without the details needed to load it.'
+          }
+          actionLabel="Retry"
+          onAction={() => {
+            onClose();
+            setActiveTab('markets');
+          }}
+          secondaryActionLabel="Back"
+          onSecondaryAction={onClose}
+        />
+      </ModalWrapper>
+    );
+  }
+
+  const isBuy = activeAction === 'buy';
+  const inWatchlist = isWatchlisted(stock.symbol);
+  const netTotal = isBuy ? grossValue + charges.totalCharges : grossValue - charges.totalCharges;
+  const maxBuyShares = isPriced ? Math.max(0, Math.floor(wallet.cashBalance / price)) : 0;
+
+  const changePercent = isFiniteNumber(stock.changePercent) ? stock.changePercent : null;
+  const isPos = (changePercent ?? 0) >= 0;
+  const emblem = getStockEmblem(stock.symbol);
+  const canSell = heldShares > 0 && isPriced;
+  const canBuy = instrument.tradable && isPriced;
+
+  // Range sliders. Positions are clamped so an odd quote can never emit "NaN%".
+  const dayLow = isFiniteNumber(stock.dayLow) ? stock.dayLow : null;
+  const dayHigh = isFiniteNumber(stock.dayHigh) ? stock.dayHigh : null;
+  const hasDayRange = dayLow !== null && dayHigh !== null && dayHigh > dayLow && isPriced;
+  const dayPos = hasDayRange ? safePercent(price - dayLow, dayHigh - dayLow, 50) : 50;
+
+  const weekLow = isFiniteNumber(stock.fiftyTwoWeekLow) ? stock.fiftyTwoWeekLow : null;
+  const weekHigh = isFiniteNumber(stock.fiftyTwoWeekHigh) ? stock.fiftyTwoWeekHigh : null;
+  const hasYearRange = weekLow !== null && weekHigh !== null && weekHigh > weekLow && isPriced;
+  const yearPos = hasYearRange ? safePercent(price - weekLow, weekHigh - weekLow, 50) : 50;
+
+  const handleExecute = async (action: 'buy' | 'sell') => {
+    if (isSubmitting) return;
+
+    if (!isPriced) {
+      showToast('Price Unavailable', 'Current market price is unavailable.', 'warning');
+      return;
+    }
+    if (action === 'buy' && !instrument.tradable) {
+      showToast(
+        'Not Tradable',
+        `${instrument.name} is a benchmark index and cannot be bought as shares.`,
+        'warning'
+      );
+      return;
+    }
     if (shares <= 0) {
       showToast('Invalid Quantity', 'Please select at least 1 virtual share.', 'warning');
       return;
     }
-    if (isBuy && netTotal > wallet.cashBalance) {
-      showToast('Insufficient Cash', 'Your virtual cash balance is lower than this trade value.', 'warning');
-      return;
-    }
-    if (!isBuy && shares > heldShares) {
-      showToast('Insufficient Shares', `You only own ${heldShares} shares in your portfolio.`, 'warning');
-      return;
-    }
-
-    setIsSubmitting(true);
-    let success = false;
-    if (isBuy) {
-      success = await buyStock(stock.symbol, shares);
-    } else {
-      success = await sellStock(stock.symbol, shares);
-    }
-    setIsSubmitting(false);
-    if (success) {
+    if (action === 'buy' && netTotal > wallet.cashBalance) {
       showToast(
-        isBuy ? 'Simulated Buy Executed' : 'Simulated Sell Executed',
-        `${isBuy ? 'Bought' : 'Sold'} ${shares} shares of ${stock.symbol} at ₹${stock.currentPrice}`,
-        'success'
+        'Insufficient Cash',
+        'Your virtual cash balance is lower than this trade value.',
+        'warning'
       );
-      onClose();
+      return;
+    }
+    if (action === 'sell' && heldShares <= 0) {
+      showToast('No Holding', 'No available holding to sell.', 'warning');
+      return;
+    }
+    if (action === 'sell' && shares > heldShares) {
+      showToast(
+        'Insufficient Shares',
+        `You only own ${formatQuantity(heldShares)} shares in your portfolio.`,
+        'warning'
+      );
+      return;
+    }
+
+    setActiveAction(action);
+    setIsSubmitting(true);
+    try {
+      const success =
+        action === 'buy'
+          ? await buyStock(stock.symbol, shares)
+          : await sellStock(stock.symbol, shares);
+      if (success) onClose();
+    } catch (err) {
+      showToast(
+        'Order Failed',
+        err instanceof Error ? err.message : 'The simulated order could not be completed.',
+        'warning'
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const toggleChecklist = (id: string) => {
-    setCheckedItems((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  // Sparkline fallback or candles close series
-  const chartSeries = useMemo(() => {
-    if (candles.length > 0) {
-      return candles.map((c) => c.close);
+  const renderChart = () => {
+    if (chartStatus === 'loading' && !chartHasData) {
+      return <LoadingState title="Loading chart..." compact />;
     }
-    if (selectedTimeframe === '1D') return stock.historical1D || stock.sparkline;
-    if (selectedTimeframe === '1W') return stock.historical1W || stock.sparkline;
-    if (selectedTimeframe === '1M') return stock.historical1M || stock.sparkline;
-    return stock.historical1Y || stock.sparkline;
-  }, [candles, selectedTimeframe, stock]);
+    if (chartStatus === 'error' && !chartHasData) {
+      return (
+        <ErrorState
+          title="Unable to load chart data."
+          message="The historical price feed could not be reached."
+          actionLabel="Retry"
+          onAction={retryChart}
+          compact
+        />
+      );
+    }
+    if (!chartHasData) {
+      return (
+        <EmptyState
+          title="Chart data is not available for this time range."
+          message="Try another timeframe below."
+          iconName="activity"
+          compact
+        />
+      );
+    }
 
-  // Performance slider range percentages
-  const dayRange = (stock.dayHigh || stock.currentPrice * 1.02) - (stock.dayLow || stock.currentPrice * 0.98);
-  const dayPos = dayRange > 0 ? ((stock.currentPrice - (stock.dayLow || stock.currentPrice * 0.98)) / dayRange) * 100 : 50;
+    if (isCandleMode) {
+      return (
+        <View>
+          <View style={styles.candleToggleRow}>
+            <Text style={styles.candleHeading}>Candlestick Price Action</Text>
+            <TouchableOpacity
+              onPress={() => setIsCandleMode(false)}
+              style={styles.lineToggleBtn}
+              accessibilityRole="button"
+            >
+              <Icon name="activity" size={14} color={POSITIVE} />
+              <Text style={styles.lineToggleText}>Switch to Line</Text>
+            </TouchableOpacity>
+          </View>
+          <GrowwCandleChart candles={candles} height={230} />
+        </View>
+      );
+    }
 
-  const yearRange = (stock.fiftyTwoWeekHigh || stock.currentPrice * 1.3) - (stock.fiftyTwoWeekLow || stock.currentPrice * 0.7);
-  const yearPos = yearRange > 0 ? ((stock.currentPrice - (stock.fiftyTwoWeekLow || stock.currentPrice * 0.7)) / yearRange) * 100 : 50;
-
-  // Company logo emblem colors
-  const getStockEmblem = (sym: string) => {
-    if (sym.includes('RELIANCE')) return { bg: '#0284C7', text: 'RIL' };
-    if (sym.includes('TCS')) return { bg: '#1E3A8A', text: 'TCS' };
-    if (sym.includes('HDFC')) return { bg: '#DC2626', text: 'HDFC' };
-    if (sym.includes('INFY')) return { bg: '#0284C7', text: 'INFY' };
-    if (sym.includes('ICICI')) return { bg: '#D97706', text: 'ICICI' };
-    if (sym.includes('SBIN')) return { bg: '#0D9488', text: 'SBI' };
-    if (sym.includes('BHARTI')) return { bg: '#E11D48', text: 'AIR' };
-    if (sym.includes('ITC')) return { bg: '#7C3AED', text: 'ITC' };
-    if (sym.includes('TATAMOTORS') || sym.includes('TATA')) return { bg: '#0369A1', text: 'TATA' };
-    return { bg: '#00D09C', text: sym.slice(0, 3) };
+    return (
+      <GrowwInteractiveChart
+        data={chartSeries}
+        currentPrice={price ?? undefined}
+        timeframe={selectedTimeframe}
+        onTimeframeChange={setSelectedTimeframe}
+        showCandleToggle={candles.length > 0}
+        isCandleMode={isCandleMode}
+        onToggleCandleMode={() => setIsCandleMode(true)}
+        height={220}
+        isRefreshing={chartStatus === 'loading'}
+      />
+    );
   };
-
-  const emblem = getStockEmblem(stock.symbol);
 
   return (
-    <ModalWrapper
-      visible={visible}
-      onClose={onClose}
-      title=""
-      subtitle=""
-      iconName="stocks"
-    >
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContainer}>
-        {/* Groww Top Navigation Bar */}
+    <ModalWrapper visible={visible} onClose={onClose} title="" subtitle="" iconName="stocks">
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
+        {/* Header: identity, live price and change */}
         <View style={styles.topHeaderBar}>
           <View style={styles.topHeaderLeft}>
             <View style={[styles.stockEmblem, { backgroundColor: emblem.bg }]}>
-              <Text style={styles.stockEmblemText}>{emblem.text}</Text>
+              <Text style={styles.stockEmblemText} numberOfLines={1}>
+                {emblem.text}
+              </Text>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.stockTitleText} numberOfLines={1}>
+            <View style={styles.headerTextCol}>
+              <Text style={styles.stockTitleText} numberOfLines={2}>
                 {stock.name}
               </Text>
               <View style={styles.categoryBadgeRow}>
                 <View style={styles.exchangePill}>
-                  <Text style={styles.exchangeText}>{stock.exchange || 'NSE'}</Text>
+                  <Text style={styles.exchangeText}>{instrument.exchange}</Text>
                 </View>
-                <Text style={styles.badgeText}>{stock.sector}</Text>
-                <Text style={styles.badgeDot}>•</Text>
-                <Text style={[styles.badgeText, { color: stock.risk === 'High' ? '#DC2626' : '#059669' }]}>
+                <Text style={styles.badgeText} numberOfLines={1}>
+                  {stock.sector}
+                </Text>
+                <Text style={styles.badgeDot}>·</Text>
+                <Text
+                  style={[styles.badgeText, { color: stock.risk === 'High' ? '#DC2626' : '#059669' }]}
+                >
                   {stock.risk} Risk
                 </Text>
               </View>
@@ -218,139 +401,220 @@ export const StockTradeModal: React.FC<StockTradeModalProps> = ({
             <TouchableOpacity
               activeOpacity={0.7}
               onPress={() => toggleWatchlist(stock.symbol)}
-              style={styles.iconBtn}
+              style={[styles.iconBtn, inWatchlist && styles.iconBtnActive]}
+              accessibilityRole="button"
+              accessibilityLabel={inWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
             >
-              <Icon
-                name={inWatchlist ? 'bookmark' : 'bookmark'}
-                size={18}
-                color={inWatchlist ? '#00D09C' : '#64748B'}
-              />
+              <Icon name="bookmark" size={18} color={inWatchlist ? POSITIVE : '#64748B'} />
             </TouchableOpacity>
-            <TouchableOpacity activeOpacity={0.7} onPress={handleShare} style={styles.iconBtn}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={handleShare}
+              style={styles.iconBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Share this stock"
+            >
               <Icon name="share" size={18} color="#64748B" />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Groww Interactive Chart Card */}
-        <View style={styles.chartWrapperCard}>
-          {isCandleMode ? (
-            <View>
-              <View style={styles.candleToggleRow}>
-                <Text style={styles.candleHeading}>Candlestick Price Action</Text>
-                <TouchableOpacity
-                  onPress={() => setIsCandleMode(false)}
-                  style={styles.lineToggleBtn}
-                >
-                  <Icon name="activity" size={14} color="#00D09C" />
-                  <Text style={styles.lineToggleText}>Switch to Line</Text>
-                </TouchableOpacity>
-              </View>
-              <GrowwCandleChart candles={candles} height={230} />
-            </View>
-          ) : (
-            <GrowwInteractiveChart
-              data={chartSeries}
-              currentPrice={stock.currentPrice}
-              timeframe={selectedTimeframe}
-              onTimeframeChange={(tf) => setSelectedTimeframe(tf)}
-              showCandleToggle={true}
-              isCandleMode={isCandleMode}
-              onToggleCandleMode={() => setIsCandleMode(true)}
-              height={220}
+        <View style={styles.livePriceRow}>
+          <Text style={styles.livePriceText}>{formatCurrencyOrDash(price, true)}</Text>
+          <View
+            style={[styles.livePricePill, { backgroundColor: isPos ? '#E8FAF2' : '#FFEBEF' }]}
+          >
+            <Icon
+              name={isPos ? 'arrow-up-right' : 'arrow-down-right'}
+              size={12}
+              color={isPos ? POSITIVE : NEGATIVE}
             />
-          )}
+            <Text style={[styles.livePricePillText, { color: isPos ? POSITIVE : NEGATIVE }]}>
+              {formatSignedCurrency(stock.change, true)} ({formatPercentage(changePercent, true, 2)})
+            </Text>
+          </View>
+          <Text style={styles.liveStatusText} numberOfLines={1}>
+            {marketStatus.isOpen ? `${instrument.exchange} Live` : 'Market Closed'}
+          </Text>
         </View>
 
-        {/* Groww Performance Range Sliders (Today's Low/High & 52W Low/High) */}
+        {!isPriced ? (
+          <View style={styles.warningBanner}>
+            <Icon name="alert" size={14} color="#B45309" />
+            <Text style={styles.warningBannerText}>
+              Current market price is unavailable. Orders are disabled until a live quote arrives.
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Chart */}
+        <View style={styles.chartWrapperCard}>{renderChart()}</View>
+
+        {/* Performance ranges */}
         <View style={styles.performanceCard}>
           <Text style={styles.perfCardTitle}>Performance</Text>
 
-          {/* Today's Range */}
           <View style={styles.rangeRow}>
             <View style={styles.rangeLimitCol}>
               <Text style={styles.rangeLabel}>Today's Low</Text>
-              <Text style={styles.rangeVal}>{formatCurrency(stock.dayLow || stock.currentPrice * 0.98, true)}</Text>
+              <Text style={styles.rangeVal}>{formatCurrencyOrDash(dayLow, true)}</Text>
             </View>
-
             <View style={styles.trackContainer}>
               <View style={styles.trackBar} />
-              <View style={[styles.trackPointer, { left: `${Math.max(5, Math.min(95, dayPos))}%` }]} />
+              {hasDayRange ? (
+                <View style={[styles.trackPointer, { left: toWidthPercent(dayPos, 4, 94) }]} />
+              ) : null}
             </View>
-
-            <View style={[styles.rangeLimitCol, { alignItems: 'flex-end' }]}>
+            <View style={[styles.rangeLimitCol, styles.rangeLimitColEnd]}>
               <Text style={styles.rangeLabel}>Today's High</Text>
-              <Text style={styles.rangeVal}>{formatCurrency(stock.dayHigh || stock.currentPrice * 1.02, true)}</Text>
+              <Text style={styles.rangeVal}>{formatCurrencyOrDash(dayHigh, true)}</Text>
             </View>
           </View>
 
-          {/* 52-Week Range */}
           <View style={[styles.rangeRow, { marginTop: 14 }]}>
             <View style={styles.rangeLimitCol}>
               <Text style={styles.rangeLabel}>52W Low</Text>
-              <Text style={styles.rangeVal}>{formatCurrency(stock.fiftyTwoWeekLow || stock.currentPrice * 0.7, true)}</Text>
+              <Text style={styles.rangeVal}>{formatCurrencyOrDash(weekLow, true)}</Text>
             </View>
-
             <View style={styles.trackContainer}>
               <View style={styles.trackBar} />
-              <View style={[styles.trackPointer, { left: `${Math.max(5, Math.min(95, yearPos))}%` }]} />
+              {hasYearRange ? (
+                <View style={[styles.trackPointer, { left: toWidthPercent(yearPos, 4, 94) }]} />
+              ) : null}
             </View>
-
-            <View style={[styles.rangeLimitCol, { alignItems: 'flex-end' }]}>
+            <View style={[styles.rangeLimitCol, styles.rangeLimitColEnd]}>
               <Text style={styles.rangeLabel}>52W High</Text>
-              <Text style={styles.rangeVal}>{formatCurrency(stock.fiftyTwoWeekHigh || stock.currentPrice * 1.3, true)}</Text>
+              <Text style={styles.rangeVal}>{formatCurrencyOrDash(weekHigh, true)}</Text>
             </View>
           </View>
 
-          {/* Quick Metrics Bar */}
           <View style={styles.quickMetricsGrid}>
             <View style={styles.quickMetricItem}>
               <Text style={styles.qmLabel}>Open Price</Text>
-              <Text style={styles.qmVal}>{formatCurrency(stock.openPrice || stock.currentPrice, true)}</Text>
+              <Text style={styles.qmVal}>{formatCurrencyOrDash(stock.openPrice, true)}</Text>
             </View>
             <View style={styles.quickMetricItem}>
               <Text style={styles.qmLabel}>Prev. Close</Text>
-              <Text style={styles.qmVal}>{formatCurrency(stock.previousClose || stock.currentPrice, true)}</Text>
+              <Text style={styles.qmVal}>{formatCurrencyOrDash(stock.previousClose, true)}</Text>
             </View>
             <View style={styles.quickMetricItem}>
               <Text style={styles.qmLabel}>Volume</Text>
-              <Text style={styles.qmVal}>{formatCompactCurrency(stock.volume || 1500000)}</Text>
+              <Text style={styles.qmVal}>{formatCompactNumber(stock.volume)}</Text>
             </View>
           </View>
         </View>
 
-        {/* Existing Holding Banner */}
-        {holding && holding.shares > 0 && (
-          <View style={styles.holdingBanner}>
-            <View style={styles.holdingLeft}>
-              <Icon name="invest" size={18} color="#00D09C" />
-              <View>
-                <Text style={styles.holdingTitle}>Portfolio Position</Text>
-                <Text style={styles.holdingShares}>
-                  {holding.shares} Shares · Avg ₹{holding.averageBuyPrice.toFixed(2)}
-                </Text>
-              </View>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.holdingVal}>
-                {formatCurrency(holding.currentValue || holding.shares * stock.currentPrice)}
-              </Text>
-              <Text
-                style={[
-                  styles.holdingPnl,
-                  { color: (holding.unrealizedPnL || 0) >= 0 ? '#00D09C' : '#EB5757' },
-                ]}
-              >
-                {(holding.unrealizedPnL || 0) >= 0 ? '+' : ''}
-                {formatCurrency(holding.unrealizedPnL || 0)} ({(holding.returnPercent || 0).toFixed(2)}%)
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Groww Key Fundamentals & Ratios */}
+        {/* Portfolio position — present in both owned and not-owned states */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionHeaderTitle}>Fundamentals & Valuation</Text>
+          <Text style={styles.sectionHeaderTitle}>Your Position</Text>
+          {position.isHeld ? (
+            <>
+              <Text style={styles.sectionHeaderSub}>
+                Live valuation of your virtual holding in {stock.symbol}
+              </Text>
+              <View style={styles.positionGrid}>
+                <View style={styles.positionCell}>
+                  <Text style={styles.positionLabel}>Quantity</Text>
+                  <Text style={styles.positionVal}>{formatQuantity(position.shares)} sh</Text>
+                </View>
+                <View style={styles.positionCell}>
+                  <Text style={styles.positionLabel}>Avg Buy Price</Text>
+                  <Text style={styles.positionVal}>
+                    {formatCurrencyOrDash(position.averageBuyPrice, true)}
+                  </Text>
+                </View>
+                <View style={styles.positionCell}>
+                  <Text style={styles.positionLabel}>Current Price</Text>
+                  <Text style={styles.positionVal}>{formatCurrencyOrDash(price, true)}</Text>
+                </View>
+                <View style={styles.positionCell}>
+                  <Text style={styles.positionLabel}>Invested</Text>
+                  <Text style={styles.positionVal}>{formatCurrency(position.totalInvested)}</Text>
+                </View>
+                <View style={styles.positionCell}>
+                  <Text style={styles.positionLabel}>Current Value</Text>
+                  <Text style={styles.positionVal}>
+                    {position.hasLivePrice ? formatCurrency(position.currentValue) : UNAVAILABLE}
+                  </Text>
+                </View>
+                <View style={styles.positionCell}>
+                  <Text style={styles.positionLabel}>Portfolio Weight</Text>
+                  <Text style={styles.positionVal}>
+                    {formatPercentage(position.weightPercent, false)}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.pnlSplitRow}>
+                <View style={styles.pnlSplitCell}>
+                  <Text style={styles.positionLabel}>Today's P&amp;L</Text>
+                  <Text
+                    style={[
+                      styles.pnlSplitVal,
+                      { color: position.dayPnL >= 0 ? POSITIVE : NEGATIVE },
+                    ]}
+                  >
+                    {position.hasLivePrice ? formatSignedCurrency(position.dayPnL) : UNAVAILABLE}
+                  </Text>
+                </View>
+                <View style={styles.pnlSplitDivider} />
+                <View style={styles.pnlSplitCell}>
+                  <Text style={styles.positionLabel}>Total P&amp;L</Text>
+                  <Text
+                    style={[
+                      styles.pnlSplitVal,
+                      { color: position.unrealizedPnL >= 0 ? POSITIVE : NEGATIVE },
+                    ]}
+                  >
+                    {position.hasLivePrice
+                      ? `${formatSignedCurrency(position.unrealizedPnL)} (${formatPercentage(
+                          position.returnPercent,
+                          true,
+                          2
+                        )})`
+                      : UNAVAILABLE}
+                  </Text>
+                </View>
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={styles.sectionHeaderSub}>Not in your portfolio</Text>
+              <View style={styles.notOwnedActions}>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => setActiveAction('buy')}
+                  style={[styles.notOwnedBtn, styles.notOwnedBtnPrimary]}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.notOwnedBtnPrimaryText}>Buy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => toggleWatchlist(stock.symbol)}
+                  style={styles.notOwnedBtn}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.notOwnedBtnText}>
+                    {inWatchlist ? 'In Watchlist' : 'Add to Watchlist'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => setExpandedMetric('pe')}
+                  style={styles.notOwnedBtn}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.notOwnedBtnText}>Research</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </View>
+
+        {/* Fundamentals */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionHeaderTitle}>Fundamentals &amp; Valuation</Text>
           <Text style={styles.sectionHeaderSub}>
             Key ratios to judge if the company is priced fairly
           </Text>
@@ -359,57 +623,85 @@ export const StockTradeModal: React.FC<StockTradeModalProps> = ({
             <TouchableOpacity
               onPress={() => setExpandedMetric(expandedMetric === 'pe' ? null : 'pe')}
               style={styles.fundGridItem}
+              accessibilityRole="button"
             >
-              <Text style={styles.fundLabel}>P/E Ratio ⓘ</Text>
-              <Text style={styles.fundVal}>{stock.peRatio || 24.5}</Text>
-              <Text style={styles.fundSub}>Ind: {stock.fundamentals?.sectorPE || 22.0}</Text>
+              <View style={styles.fundLabelRow}>
+                <Text style={styles.fundLabel} numberOfLines={1}>
+                  P/E Ratio
+                </Text>
+                <Icon name="info" size={10} color="#94A3B8" />
+              </View>
+              <Text style={styles.fundVal}>{stock.peRatio > 0 ? stock.peRatio : UNAVAILABLE}</Text>
+              <Text style={styles.fundSub}>
+                Ind: {stock.fundamentals?.sectorPE ?? UNAVAILABLE}
+              </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={() => setExpandedMetric(expandedMetric === 'marketCap' ? null : 'marketCap')}
-              style={styles.fundGridItem}
-            >
-              <Text style={styles.fundLabel}>Market Cap</Text>
-              <Text style={styles.fundVal}>{stock.marketCap || '₹8.5 Lakh Cr'}</Text>
-              <Text style={styles.fundSub}>Large Cap</Text>
-            </TouchableOpacity>
+            <View style={styles.fundGridItem}>
+              <Text style={styles.fundLabel} numberOfLines={1}>
+                Market Cap
+              </Text>
+              <Text style={styles.fundVal} numberOfLines={2}>
+                {stock.marketCap}
+              </Text>
+              <Text style={styles.fundSub}>Company size</Text>
+            </View>
 
             <TouchableOpacity
               onPress={() => setExpandedMetric(expandedMetric === 'roe' ? null : 'roe')}
               style={styles.fundGridItem}
+              accessibilityRole="button"
             >
-              <Text style={styles.fundLabel}>ROE % ⓘ</Text>
-              <Text style={[styles.fundVal, { color: '#00D09C' }]}>{stock.roe || 18.4}%</Text>
+              <View style={styles.fundLabelRow}>
+                <Text style={styles.fundLabel} numberOfLines={1}>
+                  ROE
+                </Text>
+                <Icon name="info" size={10} color="#94A3B8" />
+              </View>
+              <Text style={[styles.fundVal, { color: POSITIVE }]}>
+                {formatPercentage(stock.roe, false)}
+              </Text>
               <Text style={styles.fundSub}>Profitability</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => setExpandedMetric(expandedMetric === 'debt' ? null : 'debt')}
               style={styles.fundGridItem}
+              accessibilityRole="button"
             >
-              <Text style={styles.fundLabel}>Debt to Equity ⓘ</Text>
-              <Text style={styles.fundVal}>{stock.debtToEquity || 0.35}</Text>
-              <Text style={styles.fundSub}>Balance Sheet</Text>
+              <View style={styles.fundLabelRow}>
+                <Text style={styles.fundLabel} numberOfLines={1}>
+                  Debt/Equity
+                </Text>
+                <Icon name="info" size={10} color="#94A3B8" />
+              </View>
+              <Text style={styles.fundVal}>
+                {isFiniteNumber(stock.debtToEquity) ? stock.debtToEquity : UNAVAILABLE}
+              </Text>
+              <Text style={styles.fundSub}>Balance sheet</Text>
             </TouchableOpacity>
 
             <View style={styles.fundGridItem}>
-              <Text style={styles.fundLabel}>EPS (Earnings/Sh)</Text>
-              <Text style={styles.fundVal}>₹{stock.eps || 64.2}</Text>
+              <Text style={styles.fundLabel} numberOfLines={1}>
+                EPS
+              </Text>
+              <Text style={styles.fundVal}>{formatCurrencyOrDash(stock.eps, true)}</Text>
               <Text style={styles.fundSub}>Trailing 12M</Text>
             </View>
 
             <View style={styles.fundGridItem}>
-              <Text style={styles.fundLabel}>Div. Yield</Text>
-              <Text style={styles.fundVal}>{stock.dividendYield || 1.15}%</Text>
-              <Text style={styles.fundSub}>Cash Return</Text>
+              <Text style={styles.fundLabel} numberOfLines={1}>
+                Div. Yield
+              </Text>
+              <Text style={styles.fundVal}>{formatPercentage(stock.dividendYield, false, 2)}</Text>
+              <Text style={styles.fundSub}>Cash return</Text>
             </View>
           </View>
 
-          {/* Student Educational Explainer Popout */}
-          {expandedMetric && EDUCATIONAL_METRICS[expandedMetric] && (
+          {expandedMetric && EDUCATIONAL_METRICS[expandedMetric] ? (
             <View style={styles.explainerBox}>
               <View style={styles.explainerHeader}>
-                <Icon name="learn" size={16} color="#00D09C" />
+                <Icon name="learn" size={16} color={POSITIVE} />
                 <Text style={styles.explainerTitle}>
                   {EDUCATIONAL_METRICS[expandedMetric].title}
                 </Text>
@@ -417,14 +709,25 @@ export const StockTradeModal: React.FC<StockTradeModalProps> = ({
               <Text style={styles.explainerBody}>
                 {EDUCATIONAL_METRICS[expandedMetric].whatItMeans}
               </Text>
-              <Text style={styles.explainerTakeaway}>
-                💡 {EDUCATIONAL_METRICS[expandedMetric].whyItMatters}
-              </Text>
+              <View style={styles.explainerTakeawayRow}>
+                <Icon name="lightbulb" size={13} color={POSITIVE} />
+                <Text style={styles.explainerTakeaway}>
+                  {EDUCATIONAL_METRICS[expandedMetric].whyItMatters}
+                </Text>
+              </View>
             </View>
-          )}
+          ) : null}
         </View>
 
-        {/* Order Execution & Quantity Selector Box */}
+        {/* About */}
+        {stock.description ? (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionHeaderTitle}>About {stock.symbol}</Text>
+            <Text style={styles.aboutText}>{stock.description}</Text>
+          </View>
+        ) : null}
+
+        {/* Order ticket */}
         <View style={styles.tradeControlCard}>
           <View style={styles.tradeControlHeader}>
             <Text style={styles.tradeControlTitle}>Simulate Order Execution</Text>
@@ -432,91 +735,119 @@ export const StockTradeModal: React.FC<StockTradeModalProps> = ({
               <TouchableOpacity
                 onPress={() => setActiveAction('buy')}
                 style={[styles.bsPill, isBuy && styles.bsPillBuyActive]}
+                accessibilityRole="button"
               >
-                <Text style={[styles.bsPillText, isBuy && styles.bsPillTextBuy]}>BUY</Text>
+                <Text style={[styles.bsPillText, isBuy && styles.bsPillTextActive]}>BUY</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => setActiveAction('sell')}
                 style={[styles.bsPill, !isBuy && styles.bsPillSellActive]}
+                accessibilityRole="button"
               >
-                <Text style={[styles.bsPillText, !isBuy && styles.bsPillTextSell]}>SELL</Text>
+                <Text style={[styles.bsPillText, !isBuy && styles.bsPillTextActive]}>SELL</Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Share Quantity Controls */}
           <View style={styles.qtyRow}>
-            <Text style={styles.qtyLabel}>Quantity (Whole Shares):</Text>
+            <Text style={styles.qtyLabel}>Quantity (whole shares)</Text>
             <View style={styles.qtyStepper}>
               <TouchableOpacity
-                onPress={() => setShares(Math.max(1, shares - 1))}
+                onPress={() => setShares((n) => Math.max(1, n - 1))}
                 style={styles.stepBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Decrease quantity"
               >
-                <Text style={styles.stepBtnText}>−</Text>
+                <Icon name="minus" size={16} color="#0F172A" />
               </TouchableOpacity>
               <TextInput
-                value={shares.toString()}
+                value={String(shares)}
                 onChangeText={(t) => {
-                  const val = parseInt(t.replace(/[^0-9]/g, ''), 10);
-                  setShares(isNaN(val) ? 1 : Math.max(1, Math.min(10000, val)));
+                  const digits = t.replace(/[^0-9]/g, '');
+                  const val = parseInt(digits, 10);
+                  setShares(Number.isNaN(val) ? 1 : clamp(val, 1, 10000));
                 }}
-                keyboardType="numeric"
+                keyboardType="number-pad"
+                returnKeyType="done"
+                maxLength={5}
                 style={styles.qtyInput}
+                accessibilityLabel="Share quantity"
               />
               <TouchableOpacity
-                onPress={() => setShares(shares + 1)}
+                onPress={() => setShares((n) => Math.min(10000, n + 1))}
                 style={styles.stepBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Increase quantity"
               >
-                <Text style={styles.stepBtnText}>+</Text>
+                <Icon name="plus" size={16} color="#0F172A" />
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Quick Quantity Shortcuts */}
           <View style={styles.quickQtyRow}>
             {[1, 5, 10, 25, 50].map((q) => (
               <TouchableOpacity
                 key={q}
                 onPress={() => setShares(q)}
                 style={[styles.quickQtyBtn, shares === q && styles.quickQtyBtnActive]}
+                accessibilityRole="button"
               >
                 <Text style={[styles.quickQtyText, shares === q && styles.quickQtyTextActive]}>
-                  +{q}
+                  {q}
                 </Text>
               </TouchableOpacity>
             ))}
-            {maxBuyShares > 0 && isBuy && (
+            {isBuy && maxBuyShares > 0 ? (
               <TouchableOpacity
                 onPress={() => setShares(maxBuyShares)}
                 style={styles.quickQtyBtn}
+                accessibilityRole="button"
               >
-                <Text style={[styles.quickQtyText, { color: '#00D09C', fontWeight: '800' }]}>
+                <Text style={[styles.quickQtyText, styles.quickQtyMaxText]}>
                   Max ({maxBuyShares})
                 </Text>
               </TouchableOpacity>
-            )}
+            ) : null}
+            {!isBuy && heldShares > 0 ? (
+              <TouchableOpacity
+                onPress={() => setShares(Math.floor(heldShares))}
+                style={styles.quickQtyBtn}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.quickQtyText, styles.quickQtyMaxText]}>
+                  All ({formatQuantity(heldShares)})
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
 
-          {/* Order Summary & Charges */}
           <View style={styles.orderSummary}>
             <View style={styles.orderRow}>
-              <Text style={styles.orderLabel}>Gross Value ({shares} × ₹{stock.currentPrice}):</Text>
-              <Text style={styles.orderVal}>{formatCurrency(grossValue)}</Text>
+              <Text style={styles.orderLabel} numberOfLines={2}>
+                Gross value ({shares} × {formatCurrencyOrDash(price, true)})
+              </Text>
+              <Text style={styles.orderVal}>{isPriced ? formatCurrency(grossValue) : UNAVAILABLE}</Text>
             </View>
             <View style={styles.orderRow}>
-              <Text style={styles.orderLabel}>Simulated Statutory Taxes (STT + GST):</Text>
-              <Text style={styles.orderVal}>+{formatCurrency(charges.totalCharges)}</Text>
+              <Text style={styles.orderLabel} numberOfLines={2}>
+                Simulated statutory charges
+              </Text>
+              <Text style={styles.orderVal}>
+                {isPriced ? formatCurrency(charges.totalCharges) : UNAVAILABLE}
+              </Text>
             </View>
             <View style={[styles.orderRow, styles.orderTotalRow]}>
-              <Text style={styles.orderTotalLabel}>Net Virtual Payable:</Text>
-              <Text style={[styles.orderTotalVal, { color: isBuy ? '#00D09C' : '#EB5757' }]}>
-                {formatCurrency(netTotal)}
+              <Text style={styles.orderTotalLabel}>
+                {isBuy ? 'Net virtual payable' : 'Net virtual credit'}
+              </Text>
+              <Text style={[styles.orderTotalVal, { color: isBuy ? POSITIVE : NEGATIVE }]}>
+                {isPriced ? formatCurrency(netTotal) : UNAVAILABLE}
               </Text>
             </View>
           </View>
         </View>
 
-        {/* Pre-Investment Checklist */}
+        {/* Pre-investment checklist */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionHeaderTitle}>Pre-Investment Checklist</Text>
           <Text style={styles.sectionHeaderSub}>
@@ -532,11 +863,13 @@ export const StockTradeModal: React.FC<StockTradeModalProps> = ({
                   activeOpacity={0.7}
                   onPress={() => toggleChecklist(item.id)}
                   style={[styles.checklistItem, checked && styles.checklistItemActive]}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked }}
                 >
                   <View style={[styles.checkbox, checked && styles.checkboxActive]}>
-                    {checked && <Icon name="check" size={12} color="#FFFFFF" />}
+                    {checked ? <Icon name="check" size={12} color="#FFFFFF" /> : null}
                   </View>
-                  <View style={{ flex: 1 }}>
+                  <View style={styles.checklistTextCol}>
                     <Text style={styles.checklistTitle}>{item.title}</Text>
                     <Text style={styles.checklistDesc}>{item.description}</Text>
                   </View>
@@ -546,41 +879,48 @@ export const StockTradeModal: React.FC<StockTradeModalProps> = ({
           </View>
         </View>
 
-        {/* Available Virtual Balance */}
         <View style={styles.balanceReminder}>
           <Icon name="wallet" size={14} color="#64748B" />
           <Text style={styles.balanceReminderText}>
-            Available Virtual Practice Cash: {formatCurrency(wallet.cashBalance)}
+            Available virtual practice cash: {formatCurrency(wallet.cashBalance)}
           </Text>
         </View>
       </ScrollView>
 
-      {/* Groww Sticky Action Footer Bar (Dual Action) */}
+      {/* Sticky dual action bar */}
       <View style={styles.bottomStickyBar}>
         <TouchableOpacity
           activeOpacity={0.8}
-          onPress={() => {
-            setActiveAction('sell');
-            handleExecute();
-          }}
-          style={styles.sellActionBtn}
-          disabled={heldShares <= 0}
+          onPress={() => handleExecute('sell')}
+          style={[styles.sellActionBtn, !canSell && styles.actionBtnDisabled]}
+          disabled={!canSell || isSubmitting}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canSell || isSubmitting }}
         >
-          <Text style={[styles.sellActionText, heldShares <= 0 && { color: '#94A3B8' }]}>
-            SELL {heldShares > 0 ? `(${heldShares})` : ''}
+          <Text
+            style={[styles.sellActionText, !canSell && styles.actionTextDisabled]}
+            numberOfLines={1}
+          >
+            {heldShares > 0 ? `SELL (${formatQuantity(heldShares)})` : 'NO HOLDING'}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           activeOpacity={0.85}
-          onPress={() => {
-            setActiveAction('buy');
-            handleExecute();
-          }}
-          style={styles.buyActionBtn}
+          onPress={() => handleExecute('buy')}
+          style={[styles.buyActionBtn, !canBuy && styles.buyActionBtnDisabled]}
+          disabled={!canBuy || isSubmitting}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canBuy || isSubmitting }}
         >
-          <Text style={styles.buyActionText}>
-            BUY {shares} SHARES ({formatCurrency(netTotal)})
+          <Text style={styles.buyActionText} numberOfLines={1}>
+            {isSubmitting
+              ? 'PLACING ORDER...'
+              : !instrument.tradable
+              ? 'INDEX — NOT TRADABLE'
+              : !isPriced
+              ? 'PRICE UNAVAILABLE'
+              : `BUY ${shares} · ${formatCurrency(netTotal)}`}
           </Text>
         </TouchableOpacity>
       </View>
@@ -588,22 +928,41 @@ export const StockTradeModal: React.FC<StockTradeModalProps> = ({
   );
 };
 
+/**
+ * Public entry point. The boundary keeps a fault inside the detail sheet from
+ * reaching the root and terminating the app.
+ */
+export const StockTradeModal: React.FC<StockTradeModalProps> = (props) => {
+  if (!props.visible) return null;
+  return (
+    <ErrorBoundary section="Stock detail" onGoBack={props.onClose}>
+      <StockTradeModalBody {...props} />
+    </ErrorBoundary>
+  );
+};
+
 const styles = StyleSheet.create({
   scrollContainer: {
     paddingHorizontal: 16,
-    paddingBottom: 90,
+    paddingBottom: 110,
   },
   topHeaderBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 10,
+    gap: 8,
   },
   topHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     flex: 1,
+    minWidth: 0,
+  },
+  headerTextCol: {
+    flex: 1,
+    minWidth: 0,
   },
   stockEmblem: {
     width: 44,
@@ -611,6 +970,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   stockEmblemText: {
     fontSize: 14,
@@ -626,6 +986,7 @@ const styles = StyleSheet.create({
   categoryBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 6,
     marginTop: 3,
   },
@@ -644,6 +1005,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748B',
     fontWeight: '600',
+    flexShrink: 1,
   },
   badgeDot: {
     fontSize: 11,
@@ -653,6 +1015,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 0,
   },
   iconBtn: {
     width: 36,
@@ -661,6 +1024,60 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconBtnActive: {
+    backgroundColor: '#E6FAF5',
+  },
+  livePriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  livePriceText: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#0F172A',
+    letterSpacing: -0.5,
+  },
+  livePricePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: THEME.radii.pill,
+    flexShrink: 1,
+  },
+  livePricePillText: {
+    fontSize: 12,
+    fontWeight: '800',
+    flexShrink: 1,
+  },
+  liveStatusText: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+  warningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FCD34D',
+    borderWidth: 1,
+    borderRadius: THEME.radii.md,
+    padding: 10,
+    marginBottom: 12,
+  },
+  warningBannerText: {
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '600',
+    color: '#92400E',
   },
   chartWrapperCard: {
     backgroundColor: '#FFFFFF',
@@ -676,11 +1093,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: 12,
+    gap: 8,
   },
   candleHeading: {
     fontSize: 13,
     fontWeight: '800',
     color: '#0F172A',
+    flexShrink: 1,
   },
   lineToggleBtn: {
     flexDirection: 'row',
@@ -694,7 +1113,7 @@ const styles = StyleSheet.create({
   lineToggleText: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#00D09C',
+    color: POSITIVE,
   },
   performanceCard: {
     backgroundColor: '#FFFFFF',
@@ -716,7 +1135,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   rangeLimitCol: {
-    width: 80,
+    flexShrink: 1,
+    minWidth: 68,
+  },
+  rangeLimitColEnd: {
+    alignItems: 'flex-end',
   },
   rangeLabel: {
     fontSize: 10,
@@ -735,6 +1158,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginHorizontal: 8,
     position: 'relative',
+    minWidth: 40,
   },
   trackBar: {
     height: 4,
@@ -747,13 +1171,9 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#00D09C',
+    backgroundColor: POSITIVE,
     borderWidth: 2,
     borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
     elevation: 2,
   },
   quickMetricsGrid: {
@@ -763,10 +1183,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     marginTop: 14,
+    gap: 6,
   },
   quickMetricItem: {
     flex: 1,
     alignItems: 'center',
+    minWidth: 0,
   },
   qmLabel: {
     fontSize: 10,
@@ -778,42 +1200,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0F172A',
     marginTop: 2,
-  },
-  holdingBanner: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#E6FAF5',
-    borderColor: '#00D09C',
-    borderWidth: 1,
-    borderRadius: THEME.radii.lg,
-    padding: 12,
-    marginBottom: 14,
-  },
-  holdingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  holdingTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  holdingShares: {
-    fontSize: 10,
-    color: '#059669',
-    fontWeight: '600',
-  },
-  holdingVal: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: '#00D09C',
-  },
-  holdingPnl: {
-    fontSize: 11,
-    fontWeight: '800',
-    marginTop: 1,
   },
   sectionCard: {
     backgroundColor: '#FFFFFF',
@@ -834,23 +1220,109 @@ const styles = StyleSheet.create({
     marginTop: 1,
     marginBottom: 12,
   },
-  fundamentalsGrid: {
+  positionGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
   },
-  fundGridItem: {
-    width: '31%',
+  positionCell: {
+    flexGrow: 1,
+    flexBasis: '30%',
+    minWidth: 92,
     backgroundColor: '#F8FAFC',
     borderColor: '#E2E8F0',
     borderWidth: 1,
     borderRadius: 8,
     padding: 8,
   },
+  positionLabel: {
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  positionVal: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginTop: 2,
+  },
+  pnlSplitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 10,
+  },
+  pnlSplitCell: {
+    flex: 1,
+    minWidth: 0,
+  },
+  pnlSplitDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: '#E2E8F0',
+    marginHorizontal: 10,
+  },
+  pnlSplitVal: {
+    fontSize: 13,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  notOwnedActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  notOwnedBtn: {
+    flexGrow: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: THEME.radii.pill,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+  },
+  notOwnedBtnPrimary: {
+    backgroundColor: POSITIVE,
+    borderColor: POSITIVE,
+  },
+  notOwnedBtnPrimaryText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#FFFFFF',
+  },
+  notOwnedBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#475569',
+  },
+  fundamentalsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  fundGridItem: {
+    flexGrow: 1,
+    flexBasis: '29%',
+    minWidth: 96,
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 8,
+  },
+  fundLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
   fundLabel: {
     fontSize: 10,
     color: '#64748B',
     fontWeight: '600',
+    flexShrink: 1,
   },
   fundVal: {
     fontSize: 13,
@@ -868,7 +1340,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     marginTop: 12,
-    borderColor: '#00D09C',
+    borderColor: POSITIVE,
     borderLeftWidth: 3,
   },
   explainerHeader: {
@@ -881,17 +1353,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: '#0F172A',
+    flexShrink: 1,
   },
   explainerBody: {
     fontSize: 11,
     color: '#475569',
     lineHeight: 16,
   },
+  explainerTakeawayRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 5,
+    marginTop: 6,
+  },
   explainerTakeaway: {
+    flex: 1,
     fontSize: 11,
     fontWeight: '700',
-    color: '#00D09C',
-    marginTop: 4,
+    color: '#0F766E',
+    lineHeight: 16,
+  },
+  aboutText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#475569',
+    marginTop: 8,
   },
   tradeControlCard: {
     backgroundColor: '#FFFFFF',
@@ -905,12 +1391,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
     marginBottom: 12,
   },
   tradeControlTitle: {
     fontSize: 14,
     fontWeight: '800',
     color: '#0F172A',
+    flexShrink: 1,
   },
   buySellToggle: {
     flexDirection: 'row',
@@ -924,32 +1413,32 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   bsPillBuyActive: {
-    backgroundColor: '#00D09C',
+    backgroundColor: POSITIVE,
   },
   bsPillSellActive: {
-    backgroundColor: '#EB5757',
+    backgroundColor: NEGATIVE,
   },
   bsPillText: {
     fontSize: 11,
     fontWeight: '800',
     color: '#64748B',
   },
-  bsPillTextBuy: {
-    color: '#FFFFFF',
-  },
-  bsPillTextSell: {
+  bsPillTextActive: {
     color: '#FFFFFF',
   },
   qtyRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
     marginBottom: 10,
   },
   qtyLabel: {
     fontSize: 12,
     fontWeight: '700',
     color: '#475569',
+    flexShrink: 1,
   },
   qtyStepper: {
     flexDirection: 'row',
@@ -960,18 +1449,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   stepBtn: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepBtnText: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
   qtyInput: {
-    width: 50,
+    minWidth: 52,
     textAlign: 'center',
     fontSize: 15,
     fontWeight: '800',
@@ -980,12 +1464,13 @@ const styles = StyleSheet.create({
   },
   quickQtyRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 6,
     marginBottom: 14,
   },
   quickQtyBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 6,
     backgroundColor: '#F1F5F9',
     borderColor: '#E2E8F0',
@@ -993,7 +1478,7 @@ const styles = StyleSheet.create({
   },
   quickQtyBtnActive: {
     backgroundColor: '#E6FAF5',
-    borderColor: '#00D09C',
+    borderColor: POSITIVE,
   },
   quickQtyText: {
     fontSize: 11,
@@ -1001,7 +1486,11 @@ const styles = StyleSheet.create({
     color: '#475569',
   },
   quickQtyTextActive: {
-    color: '#00D09C',
+    color: POSITIVE,
+    fontWeight: '800',
+  },
+  quickQtyMaxText: {
+    color: POSITIVE,
     fontWeight: '800',
   },
   orderSummary: {
@@ -1013,30 +1502,37 @@ const styles = StyleSheet.create({
   orderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 10,
   },
   orderLabel: {
     fontSize: 11,
     color: '#64748B',
+    flexShrink: 1,
   },
   orderVal: {
     fontSize: 11,
     fontWeight: '700',
     color: '#0F172A',
+    flexShrink: 0,
   },
   orderTotalRow: {
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
     paddingTop: 8,
     marginTop: 2,
+    alignItems: 'center',
   },
   orderTotalLabel: {
     fontSize: 12,
     fontWeight: '800',
     color: '#0F172A',
+    flexShrink: 1,
   },
   orderTotalVal: {
     fontSize: 15,
     fontWeight: '900',
+    flexShrink: 0,
   },
   checklistGroup: {
     gap: 8,
@@ -1053,7 +1549,11 @@ const styles = StyleSheet.create({
   },
   checklistItemActive: {
     backgroundColor: '#E6FAF5',
-    borderColor: '#00D09C',
+    borderColor: POSITIVE,
+  },
+  checklistTextCol: {
+    flex: 1,
+    minWidth: 0,
   },
   checkbox: {
     width: 20,
@@ -1063,10 +1563,11 @@ const styles = StyleSheet.create({
     borderColor: '#CBD5E1',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   checkboxActive: {
-    backgroundColor: '#00D09C',
-    borderColor: '#00D09C',
+    backgroundColor: POSITIVE,
+    borderColor: POSITIVE,
   },
   checklistTitle: {
     fontSize: 12,
@@ -1089,6 +1590,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748B',
     fontWeight: '600',
+    flexShrink: 1,
   },
   bottomStickyBar: {
     position: 'absolute',
@@ -1098,16 +1600,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
     gap: 12,
   },
   sellActionBtn: {
     flex: 1,
-    height: 48,
+    minHeight: 48,
+    paddingHorizontal: 8,
     backgroundColor: '#FFFFFF',
-    borderColor: '#EB5757',
+    borderColor: NEGATIVE,
     borderWidth: 1.5,
     borderRadius: 12,
     alignItems: 'center',
@@ -1116,20 +1620,28 @@ const styles = StyleSheet.create({
   sellActionText: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#EB5757',
+    color: NEGATIVE,
+  },
+  actionBtnDisabled: {
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+  },
+  actionTextDisabled: {
+    color: '#94A3B8',
   },
   buyActionBtn: {
     flex: 2,
-    height: 48,
-    backgroundColor: '#00D09C',
+    minHeight: 48,
+    paddingHorizontal: 8,
+    backgroundColor: POSITIVE,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#00D09C',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
     elevation: 4,
+  },
+  buyActionBtnDisabled: {
+    backgroundColor: '#CBD5E1',
+    elevation: 0,
   },
   buyActionText: {
     fontSize: 13,

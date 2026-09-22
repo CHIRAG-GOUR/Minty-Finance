@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode, useRef } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import {
   UserProfile,
   UserRole,
@@ -189,7 +190,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const liveStocks = await MarketDataService.getStocks();
         const liveFunds = await MarketDataService.getMutualFunds();
 
-        if (storedProfile) {
+        if (storedProfile && typeof storedProfile.name === 'string') {
           // Sanitize any legacy cached names from older local storage
           if (
             storedProfile.name.includes('Shaurya') ||
@@ -213,10 +214,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
 
         setWallet(storedWallet);
-        setStockHoldings(storedStocks);
-        setFundHoldings(storedFunds);
-        setFdHoldings(storedFDs);
-        setTransactions(storedTx);
+        // Persisted collections come back as whatever JSON was on disk, possibly
+        // written by an older build. Rows with no identity can never be priced,
+        // sold or opened, so they are dropped rather than rendered.
+        setStockHoldings(
+          (Array.isArray(storedStocks) ? storedStocks : []).filter(
+            (h) => h && typeof h.symbol === 'string' && h.symbol.trim() !== ''
+          )
+        );
+        setFundHoldings(
+          (Array.isArray(storedFunds) ? storedFunds : []).filter(
+            (f) => f && typeof f.id === 'string' && f.id.trim() !== ''
+          )
+        );
+        setFdHoldings(Array.isArray(storedFDs) ? storedFDs.filter(Boolean) : []);
+        setTransactions(
+          (Array.isArray(storedTx) ? storedTx : []).filter(
+            (t) => t && typeof t.id === 'string' && typeof t.type === 'string'
+          )
+        );
         setBudget(storedBudget);
         setLessons(storedLessons);
         setBadges(storedBadges);
@@ -250,27 +266,67 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
   }, []);
 
-  // Real-time market streaming ticks (auto-refreshes every 3.5s for live simulation)
+  // Live market ticks.
+  //
+  // Android lifecycle aware: polling stops when the app leaves the foreground
+  // and resumes with an immediate refresh when it comes back, so a backgrounded
+  // app neither burns battery nor queues a backlog of stale responses. A single
+  // in-flight guard means a slow response cannot stack duplicate requests.
+  const tickInFlightRef = useRef(false);
+
   useEffect(() => {
-    const interval = setInterval(async () => {
-      if (!isMountedRef.current) return;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const pollOnce = async () => {
+      if (!isMountedRef.current || tickInFlightRef.current) return;
+      tickInFlightRef.current = true;
       try {
         const [updatedStocks, updatedStatus] = await Promise.all([
           MarketDataService.getStocks(),
           MarketDataService.getMarketStatus(),
         ]);
-        if (updatedStocks && updatedStocks.length > 0) {
+        if (!isMountedRef.current) return;
+        if (Array.isArray(updatedStocks) && updatedStocks.length > 0) {
           setStockCatalog(updatedStocks);
         }
         if (updatedStatus) {
           setMarketStatus(updatedStatus);
         }
       } catch {
-        // quiet tick failure
+        // A failed tick keeps the last good quotes; the banner already shows status.
+      } finally {
+        tickInFlightRef.current = false;
       }
-    }, 3500);
+    };
 
-    return () => clearInterval(interval);
+    const startPolling = () => {
+      if (intervalId !== null) return;
+      intervalId = setInterval(pollOnce, 3500);
+    };
+
+    const stopPolling = () => {
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    const handleAppStateChange = (next: AppStateStatus) => {
+      if (next === 'active') {
+        pollOnce();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+
+    if (AppState.currentState === 'active') startPolling();
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      stopPolling();
+      subscription.remove();
+    };
   }, []);
 
   const showToast = (title: string, message: string, type: 'success' | 'info' | 'warning' = 'success') => {
@@ -771,14 +827,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Real-time calculated portfolio analytics dynamically evaluated against live quotes
-  const portfolioAnalytics = PortfolioEngine.evaluatePortfolio(
-    wallet.cashBalance,
-    wallet.startingBalance || INITIAL_VIRTUAL_BALANCE,
-    stockHoldings,
-    fundHoldings,
-    fdHoldings,
-    stockCatalog,
-    fundCatalog
+  // Memoized: the market ticks every 3.5s and this walks every holding, so an
+  // unmemoized call would re-run the whole portfolio on every unrelated render.
+  const portfolioAnalytics = useMemo(
+    () =>
+      PortfolioEngine.evaluatePortfolio(
+        wallet.cashBalance,
+        wallet.startingBalance || INITIAL_VIRTUAL_BALANCE,
+        stockHoldings,
+        fundHoldings,
+        fdHoldings,
+        stockCatalog,
+        fundCatalog
+      ),
+    [
+      wallet.cashBalance,
+      wallet.startingBalance,
+      stockHoldings,
+      fundHoldings,
+      fdHoldings,
+      stockCatalog,
+      fundCatalog,
+    ]
   );
 
   const currentUserLeaderboardEntry: LeaderboardUser = {

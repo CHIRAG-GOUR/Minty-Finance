@@ -39,11 +39,16 @@ export const FundInvestModal: React.FC<FundInvestModalProps> = ({
   const [isBookmarked, setIsBookmarked] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  if (!visible || !data || !data.fund) return null;
-  const { fund, holding } = data;
+  // Hooks must run on every render, including while the sheet is hidden.
+  // An early return above them changes the hook count between renders, which
+  // React treats as fatal and which closed the app when a fund was opened.
+  const fund = data && data.fund ? data.fund : null;
+  const holding = data ? data.holding : undefined;
 
-  // Generate multi-timeframe historical NAV curve for Groww chart
+  // Modelled NAV curve for the illustration below. It is a projection from the
+  // fund's published returns, not recorded NAV history, and is labelled as such.
   const chartData = useMemo(() => {
+    if (!fund) return [];
     const baseNav = fund.nav;
     let points = 24;
     let annualRate = (fund.threeYearReturn || 16.5) / 100;
@@ -70,13 +75,17 @@ export const FundInvestModal: React.FC<FundInvestModalProps> = ({
     const stepGrowth = Math.pow(1 + annualRate, 1 / points);
 
     for (let i = 0; i < points - 1; i++) {
-      const noise = (Math.random() - 0.48) * (baseNav * 0.015);
+      // Deterministic wobble, so reopening the fund redraws the same curve
+      // rather than a different random one on every render.
+      const noise = Math.sin(i * 1.7 + baseNav) * (baseNav * 0.008);
       startVal = startVal * stepGrowth + noise;
       series.push(Number(startVal.toFixed(2)));
     }
     series.push(baseNav);
     return series;
   }, [fund, selectedTf]);
+
+  if (!visible || !fund) return null;
 
   // SIP Return Calculator Math
   const totalMonths = sipYears * 12;
@@ -139,7 +148,7 @@ export const FundInvestModal: React.FC<FundInvestModalProps> = ({
       subtitle=""
       iconName="funds"
     >
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContainer}>
+      <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContainer}>
         {/* Groww Top Navigation Bar */}
         <View style={styles.topHeaderBar}>
           <View style={styles.topHeaderLeft}>

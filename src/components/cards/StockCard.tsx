@@ -5,6 +5,8 @@ import { Icon } from '../../constants/icons';
 import { StockItem } from '../../types';
 import { StockLineChart } from '../charts/StockLineChart';
 import { formatCurrency, formatPercentage } from '../../utils/formatters';
+import { isIndexSymbol } from '../../services/instrumentResolver';
+import { isFiniteNumber } from '../../utils/safeNumber';
 
 interface StockCardProps {
   stock: StockItem;
@@ -19,8 +21,13 @@ export const StockCard: React.FC<StockCardProps> = ({
   onTradePress,
   onCardPress,
 }) => {
-  const isPositive = stock.changePercent >= 0;
+  // An unknown change must not read as a gain, so require a real number.
+  const isPositive = isFiniteNumber(stock.changePercent) ? stock.changePercent >= 0 : true;
   const trendColor = isPositive ? '#00D09C' : '#EB5757';
+
+  // NIFTY 50 / SENSEX are benchmarks: quoted, charted, but not buyable as a
+  // share. Offering BUY on them led students into an order that cannot exist.
+  const isTradable = !isIndexSymbol(stock.symbol);
 
   const getStockEmblem = (sym: string) => {
     if (sym.includes('RELIANCE')) return { bg: '#0284C7', text: 'RIL' };
@@ -70,7 +77,7 @@ export const StockCard: React.FC<StockCardProps> = ({
               color={trendColor}
             />
             <Text style={[styles.changeText, { color: trendColor }]}>
-              {isPositive ? '+' : ''}{formatPercentage(stock.changePercent)}
+              {formatPercentage(stock.changePercent)}
             </Text>
           </View>
         </View>
@@ -95,12 +102,18 @@ export const StockCard: React.FC<StockCardProps> = ({
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
           <Text style={styles.statLabel}>Mkt Cap</Text>
-          <Text style={styles.statValue}>{stock.marketCap}</Text>
+          <Text style={styles.statValue} numberOfLines={1}>
+            {stock.marketCap || '—'}
+          </Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
           <Text style={styles.statLabel}>P/E Ratio</Text>
-          <Text style={styles.statValue}>{stock.peRatio}</Text>
+          <Text style={styles.statValue} numberOfLines={1}>
+            {isFiniteNumber(stock.peRatio) && stock.peRatio > 0
+              ? stock.peRatio.toFixed(1)
+              : '—'}
+          </Text>
         </View>
       </View>
 
@@ -108,40 +121,48 @@ export const StockCard: React.FC<StockCardProps> = ({
       <View style={styles.footerRow}>
         <View style={styles.holdingStatus}>
           {heldShares > 0 ? (
-            <Text style={styles.holdingText}>
+            <Text style={styles.holdingText} numberOfLines={1}>
               Owned: <Text style={styles.holdingHighlight}>{heldShares} sh</Text> (
               {formatCurrency(heldShares * stock.currentPrice)})
             </Text>
           ) : (
-            <Text style={styles.noHoldingText}>1-tap virtual practice buy</Text>
+            <Text style={styles.noHoldingText} numberOfLines={1}>
+              {isTradable ? '1-tap virtual practice buy' : 'Benchmark index · tracking only'}
+            </Text>
           )}
         </View>
 
-        <View style={styles.tradeButtons}>
-          {heldShares > 0 ? (
+        {isTradable ? (
+          <View style={styles.tradeButtons}>
+            {heldShares > 0 ? (
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onTradePress('sell');
+                }}
+                style={[styles.tradeBtn, styles.sellBtn]}
+                accessibilityRole="button"
+                accessibilityLabel={`Sell ${stock.symbol}`}
+              >
+                <Text style={styles.sellBtnText}>SELL</Text>
+              </TouchableOpacity>
+            ) : null}
+
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={(e) => {
                 e.stopPropagation();
-                onTradePress('sell');
+                onTradePress('buy');
               }}
-              style={[styles.tradeBtn, styles.sellBtn]}
+              style={[styles.tradeBtn, styles.buyBtn]}
+              accessibilityRole="button"
+              accessibilityLabel={`Buy ${stock.symbol}`}
             >
-              <Text style={styles.sellBtnText}>SELL</Text>
+              <Text style={styles.buyBtnText}>BUY</Text>
             </TouchableOpacity>
-          ) : null}
-
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={(e) => {
-              e.stopPropagation();
-              onTradePress('buy');
-            }}
-            style={[styles.tradeBtn, styles.buyBtn]}
-          >
-            <Text style={styles.buyBtnText}>BUY</Text>
-          </TouchableOpacity>
-        </View>
+          </View>
+        ) : null}
       </View>
     </TouchableOpacity>
   );

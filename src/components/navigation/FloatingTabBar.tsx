@@ -7,6 +7,7 @@ import {
   Platform,
   Animated,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { THEME } from '../../constants/theme';
 import { Icon } from '../../constants/icons';
 import { TabType } from '../../types';
@@ -21,6 +22,11 @@ interface TabItem {
 export const FloatingTabBar: React.FC = () => {
   const { activeTab, setActiveTab, userProfile, openModal } = useApp();
   const centerBtnScale = useRef(new Animated.Value(1)).current;
+  const insets = useSafeAreaInsets();
+
+  // A fixed 16px offset put the dock inside the gesture-navigation strip on
+  // phones with a nav bar, so the system swallowed taps meant for the tabs.
+  const dockBottom = insets.bottom > 0 ? insets.bottom + 8 : Platform.OS === 'ios' ? 24 : 16;
 
   const handlePressIn = () => {
     Animated.spring(centerBtnScale, {
@@ -81,7 +87,10 @@ export const FloatingTabBar: React.FC = () => {
   const { leftTabs, rightTabs } = getTabsForRole();
 
   return (
-    <View style={styles.floatingWrapper} pointerEvents="box-none">
+    <View
+      style={[styles.floatingWrapper, { bottom: dockBottom }]}
+      pointerEvents="box-none"
+    >
       {/* Floating Obsidian Curved Dock (Inspired by Reference UI) */}
       <View style={styles.dockContainer}>
         {/* Left Tabs */}
