@@ -7,7 +7,9 @@ import {
   ScrollView,
   TextInput,
   Share,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { THEME } from '../constants/theme';
 import { Icon } from '../constants/icons';
 import { ModalWrapper } from '../components/common/ModalWrapper';
@@ -95,6 +97,9 @@ const StockTradeModalBody: React.FC<StockTradeModalProps> = ({ visible, data, on
   const [expandedMetric, setExpandedMetric] = useState<string | null>(null);
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  const insets = useSafeAreaInsets();
+  const bottomBarPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 24 : 16) + 12;
 
   // Resolve against the LIVE catalog every render, so the header price, the
   // chart and the position all move together on each market tick and stay
@@ -364,7 +369,7 @@ const StockTradeModalBody: React.FC<StockTradeModalProps> = ({ visible, data, on
     <ModalWrapper visible={visible} onClose={onClose} title="" subtitle="" iconName="stocks">
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContainer}
+        contentContainerStyle={[styles.scrollContainer, { paddingBottom: bottomBarPadding + 64 }]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
@@ -888,7 +893,7 @@ const StockTradeModalBody: React.FC<StockTradeModalProps> = ({ visible, data, on
       </ScrollView>
 
       {/* Sticky dual action bar */}
-      <View style={styles.bottomStickyBar}>
+      <View style={[styles.bottomStickyBar, { paddingBottom: bottomBarPadding }]}>
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => handleExecute('sell')}

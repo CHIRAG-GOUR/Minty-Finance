@@ -90,7 +90,7 @@ export const SharkTankScreen: React.FC = () => {
           <View style={styles.bannerLeft}>
             <View style={styles.badgeRow}>
               <Icon name="rocket" size={16} color={THEME.colors.accentYellow} />
-              <Text style={styles.bannerTag}>Skillizee Ideathon 2026</Text>
+              <Text style={styles.bannerTag}>Minty Venture Arena 2026</Text>
             </View>
             <Text style={styles.bannerTitle}>Classroom Venture Deals</Text>
             <Text style={styles.bannerDesc}>

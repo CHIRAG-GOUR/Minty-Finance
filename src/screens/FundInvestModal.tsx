@@ -7,7 +7,9 @@ import {
   ScrollView,
   TextInput,
   Share,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { THEME } from '../constants/theme';
 import { Icon } from '../constants/icons';
 import { ModalWrapper } from '../components/common/ModalWrapper';
@@ -38,6 +40,9 @@ export const FundInvestModal: React.FC<FundInvestModalProps> = ({
   const [sipYears, setSipYears] = useState<number>(3);
   const [isBookmarked, setIsBookmarked] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  const insets = useSafeAreaInsets();
+  const bottomBarPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 24 : 16) + 12;
 
   // Hooks must run on every render, including while the sheet is hidden.
   // An early return above them changes the hook count between renders, which
@@ -148,7 +153,11 @@ export const FundInvestModal: React.FC<FundInvestModalProps> = ({
       subtitle=""
       iconName="funds"
     >
-      <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContainer}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.scrollContainer, { paddingBottom: bottomBarPadding + 64 }]}
+      >
         {/* Groww Top Navigation Bar */}
         <View style={styles.topHeaderBar}>
           <View style={styles.topHeaderLeft}>
@@ -402,7 +411,7 @@ export const FundInvestModal: React.FC<FundInvestModalProps> = ({
       </ScrollView>
 
       {/* Groww Sticky Action Footer Bar (Exact match to Screenshots) */}
-      <View style={styles.bottomStickyBar}>
+      <View style={[styles.bottomStickyBar, { paddingBottom: bottomBarPadding }]}>
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => {

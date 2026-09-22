@@ -94,7 +94,7 @@ export const ProfileScreen: React.FC = () => {
                 </View>
                 <View style={styles.profileMeta}>
                   <Text style={styles.profileName}>{userProfile.name}</Text>
-                  <Text style={styles.gradeText}>Grade 9 · Skillizee CLC</Text>
+                  <Text style={styles.gradeText}>Grade 9 · Investor Academy</Text>
                   <View style={styles.levelTag}>
                     <Icon name="award" size={12} color={THEME.colors.obsidian} />
                     <Text style={styles.levelTagText}>
@@ -296,9 +296,9 @@ export const ProfileScreen: React.FC = () => {
         {activeSubTab === 'credits' && (
           <View style={styles.creditsContainer}>
             <View style={styles.creditsHeader}>
-              <Text style={styles.creditsTitle}>Skillizee CLC Ideathon Team</Text>
+              <Text style={styles.creditsTitle}>Minty Finance Core Team</Text>
               <Text style={styles.creditsSub}>
-                Built and presented by Grade 9 students for the Skillizee Ideathon
+                Built and engineered for real-time financial literacy & virtual market mastery
               </Text>
             </View>
 

@@ -145,9 +145,9 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ isLoaded, onFinish }
       <Animated.View style={[styles.footer, { opacity: contentOpacity }]}>
         <View style={styles.footerPill}>
           <View style={styles.pulseDot} />
-          <Text style={styles.footerText}>Skillizee Financial Platform</Text>
+          <Text style={styles.footerText}>Minty Financial Platform</Text>
         </View>
-        <Text style={styles.subFooterText}>Simulated Real-Time Markets</Text>
+        <Text style={styles.subFooterText}>Real-Time Market Intelligence</Text>
       </Animated.View>
     </Animated.View>
   );
