@@ -250,7 +250,7 @@ export const ProfileScreen: React.FC = () => {
               <Icon name="shield" size={32} color={THEME.colors.accentYellow} />
               <Text style={styles.trustHeading}>Parent & Educator Trust Guide</Text>
               <Text style={styles.trustSub}>
-                Minti Finance is an educational simulation sandbox created for Grade 9 students to build responsible financial instincts.
+                Minty Finance is an educational simulation sandbox created for Grade 9 students to build responsible financial instincts.
               </Text>
             </View>
 

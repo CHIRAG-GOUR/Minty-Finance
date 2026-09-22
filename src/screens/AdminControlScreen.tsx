@@ -59,8 +59,8 @@ export const AdminControlScreen: React.FC = () => {
         {/* Platform Core Metrics */}
         <View style={styles.kpiCard}>
           <View style={styles.kpiHeader}>
-            <Icon name="shield" size={20} color={THEME.colors.accentYellow} />
-            <Text style={styles.kpiTitle}>Minti Global Financial Health</Text>
+            <Icon name="pulse" size={20} color={THEME.colors.primary} />
+            <Text style={styles.kpiTitle}>Minty Global Financial Health</Text>
           </View>
 
           <View style={styles.kpiGrid}>

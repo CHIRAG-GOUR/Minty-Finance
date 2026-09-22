@@ -33,7 +33,7 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({ visible, onClose }
 
   if (!visible) return null;
 
-  const handleFetchYahoo = async () => {
+  const handleFetchLive = async () => {
     const q = symbol.trim() || name.trim();
     if (!q) {
       showToast('Input Required', 'Enter a symbol or company name first.', 'info');
@@ -50,12 +50,12 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({ visible, onClose }
         setSector(best.sector || 'Live Market');
         setPrice(best.currentPrice.toFixed(2));
         setRisk(best.risk || 'Moderate');
-        showToast('Yahoo Data Loaded', `Fetched live quote for ${best.name} (₹${best.currentPrice})`, 'success');
+        showToast('Live Data Loaded', `Fetched live quote for ${best.name} (₹${best.currentPrice})`, 'success');
       } else {
-        showToast('Not Found on Yahoo', `No active live quote found for "${q}". You can enter custom values.`, 'warning');
+        showToast('Not Found on Market', `No active live quote found for "${q}". You can enter custom values.`, 'warning');
       }
     } catch {
-      showToast('Network Alert', 'Could not query Yahoo in real time. Please enter manually.', 'warning');
+      showToast('Network Alert', 'Could not query live market in real time. Please enter manually.', 'warning');
     } finally {
       setIsFetchingLive(false);
     }
@@ -74,7 +74,7 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({ visible, onClose }
       previousClose: parsedPrice * 0.98,
       changePercent: 2.04,
       risk,
-      description: `${name.trim()} listed on the Minti Finance Exchange.`,
+      description: `${name.trim()} listed on the Minty Finance Exchange.`,
       marketCap: `₹${(parsedPrice * 10).toFixed(0)} Cr`,
       peRatio: 22.4,
       dividendYield: 1.5,
@@ -104,7 +104,7 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({ visible, onClose }
             <Text style={styles.label}>Stock Ticker Symbol</Text>
             <TouchableOpacity
               activeOpacity={0.7}
-              onPress={handleFetchYahoo}
+              onPress={handleFetchLive}
               disabled={isFetchingLive || (!symbol.trim() && !name.trim())}
               style={styles.fetchLiveBtn}
             >
@@ -113,7 +113,7 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({ visible, onClose }
               ) : (
                 <>
                   <Icon name="search" size={12} color={THEME.colors.primaryDark} />
-                  <Text style={styles.fetchLiveBtnText}>Fetch Live Yahoo</Text>
+                  <Text style={styles.fetchLiveBtnText}>Fetch Live Market</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -188,7 +188,7 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({ visible, onClose }
         </View>
 
         <PrimaryButton
-          title="List Stock on Minti Exchange"
+          title="List Stock on Minty Exchange"
           iconName="plus"
           onPress={handleCreate}
           disabled={!symbol.trim() || !name.trim()}

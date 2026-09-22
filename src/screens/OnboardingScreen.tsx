@@ -26,7 +26,7 @@ interface OnboardingSlide {
 
 const SLIDES: OnboardingSlide[] = [
   {
-    title: 'Minti Finance',
+    title: 'Minty Finance',
     headline: 'Learn Money. Practice Investing.',
     description: 'Master investment decisions with live market prices and ₹1,00,000 virtual practice money.',
     iconName: 'shield',
@@ -120,7 +120,7 @@ export const OnboardingScreen: React.FC = () => {
             <View style={styles.brandIcon}>
               <Icon name="invest" size={20} color={THEME.colors.textInverse} />
             </View>
-            <Text style={styles.brandTitle}>Minti Finance</Text>
+            <Text style={styles.brandTitle}>Minty Finance</Text>
           </View>
           {!showNameInput && (
             <TouchableOpacity
@@ -169,7 +169,7 @@ export const OnboardingScreen: React.FC = () => {
 
             <Text style={styles.setupTitle}>Welcome to Your Journey</Text>
             <Text style={styles.setupSubtitle}>
-              What should we call you in Minti Finance and on the monthly leaderboard?
+              What should we call you in Minty Finance and on the monthly leaderboard?
             </Text>
 
             <View style={styles.inputCard}>
@@ -229,7 +229,7 @@ export const OnboardingScreen: React.FC = () => {
             </>
           ) : (
             <PrimaryButton
-              title="Start Your Minti Journey"
+              title="Start Your Minty Journey"
               iconName="rocket"
               onPress={handleFinish}
               size="lg"

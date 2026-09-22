@@ -216,7 +216,7 @@ export const InvestScreen: React.FC = () => {
               <Icon name="search" size={16} color={THEME.colors.textMuted} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search any stock on Yahoo in real-time (e.g. Swiggy, Paytm, Tesla, MRF)..."
+                placeholder="Search any stock in real-time (e.g. Swiggy, Paytm, Tesla, MRF)..."
                 placeholderTextColor={THEME.colors.textMuted}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -294,7 +294,7 @@ export const InvestScreen: React.FC = () => {
               </Text>
               <View style={styles.liveBadgeRow}>
                 <View style={styles.liveIndicatorDotGreen} />
-                <Text style={styles.freshnessText}>YAHOO LIVE FEED</Text>
+                <Text style={styles.freshnessText}>LIVE EXCHANGE FEED</Text>
               </View>
             </View>
 
@@ -311,20 +311,20 @@ export const InvestScreen: React.FC = () => {
               );
             })}
 
-            {/* Live Yahoo Finance Discovery Section */}
+            {/* Live Exchange Discovery Section */}
             {additionalLiveStocks.length > 0 && (
               <View style={styles.liveDiscoverySection}>
                 <View style={styles.liveDiscoveryHeader}>
                   <View style={styles.liveDiscoveryHeaderLeft}>
                     <View style={styles.livePulseDot} />
-                    <Text style={styles.liveDiscoveryTitle}>Live Yahoo Real-Time Results</Text>
+                    <Text style={styles.liveDiscoveryTitle}>Live Market Search Results</Text>
                   </View>
                   <View style={styles.liveDiscoveryBadge}>
-                    <Text style={styles.liveDiscoveryBadgeText}>YAHOO LIVE</Text>
+                    <Text style={styles.liveDiscoveryBadgeText}>LIVE FEED</Text>
                   </View>
                 </View>
                 <Text style={styles.liveDiscoverySub}>
-                  Discovered from live Yahoo exchange feed in real-time. Tap to trade or view live chart.
+                  Discovered from live exchange feed in real-time. Tap to trade or view live chart.
                 </Text>
 
                 {additionalLiveStocks.map((stock) => {
@@ -346,7 +346,7 @@ export const InvestScreen: React.FC = () => {
               <View style={styles.liveSearchingBox}>
                 <ActivityIndicator size="small" color={THEME.colors.primaryDark} />
                 <Text style={styles.liveSearchingText}>
-                  Searching Yahoo Finance live exchange for "{searchQuery}"...
+                  Searching live market exchanges for "{searchQuery}"...
                 </Text>
               </View>
             )}

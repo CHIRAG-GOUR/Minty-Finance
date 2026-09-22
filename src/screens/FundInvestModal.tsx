@@ -104,7 +104,7 @@ export const FundInvestModal: React.FC<FundInvestModalProps> = ({
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `Check out ${fund.name} on Minti Finance! NAV: ₹${fund.nav} (3Y Return: ${fund.threeYearReturn}%).`,
+        message: `Check out ${fund.name} on Minty Finance! NAV: ₹${fund.nav} (3Y Return: ${fund.threeYearReturn}%).`,
       });
     } catch (e) {
       // ignore

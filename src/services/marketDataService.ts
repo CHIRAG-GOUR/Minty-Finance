@@ -1071,7 +1071,7 @@ export class LiveMarketDataProvider implements IMarketDataProvider {
             risk: 'Moderate',
             description: `${formattedName} (${rawSymbol}) traded on ${
               meta.fullExchangeName || 'Exchange'
-            }. Real-time authentic market quotes fetched live from Yahoo Finance.`,
+            }. Real-time authentic market quotes fetched live from exchange feeds.`,
             marketCap: 'Live Market Instrument',
             peRatio: 22.5,
             eps: round(livePrice / 25, 2),

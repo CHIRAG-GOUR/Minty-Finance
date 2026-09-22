@@ -65,7 +65,7 @@ export const AIAdvisorService = {
     if (lower.includes('pe') || lower.includes('p/e') || lower.includes('price to earnings') || lower.includes('valuation')) {
       return {
         message:
-          '[Educational Financial Metric: P/E Ratio]\n\n• What it means: The Price-to-Earnings ratio compares the current market price of a stock to its earnings per share (EPS). It shows how many rupees investors pay for ₹1 of annual company profit.\n\n• Why investors look at it: It helps determine if a stock is trading at a premium or discount compared to its sector peers.\n\n• What to watch: Fast-growing tech companies often have higher P/E ratios due to future growth expectations, while cyclical commodity firms trade at lower P/E multiples.\n\n[Disclaimer: Minti Finance provides educational analysis and never gives financial buy/sell recommendations.]',
+          '[Educational Financial Metric: P/E Ratio]\n\n• What it means: The Price-to-Earnings ratio compares the current market price of a stock to its earnings per share (EPS). It shows how many rupees investors pay for ₹1 of annual company profit.\n\n• Why investors look at it: It helps determine if a stock is trading at a premium or discount compared to its sector peers.\n\n• What to watch: Fast-growing tech companies often have higher P/E ratios due to future growth expectations, while cyclical commodity firms trade at lower P/E multiples.\n\n[Disclaimer: Minty Finance provides educational analysis and never gives financial buy/sell recommendations.]',
         suggestedPrompts: [
           'What is Debt-to-Equity ratio?',
           'What does Return on Equity (ROE) measure?',
@@ -137,7 +137,7 @@ export const AIAdvisorService = {
     if (lower.includes('stock') || lower.includes('share') || lower.includes('equity') || lower.includes('nifty')) {
       return {
         message:
-          '[Educational Market Concept: Stocks & Equities]\n\nA stock represents real fractional ownership in a listed corporation (e.g. Reliance, TCS, HDFC Bank). When the company generates profits and expands, the share price tends to appreciate and companies may distribute cash dividends to shareholders.\n\nMinti Finance allows you to practice whole-share simulated orders using live NSE market data without risking real money.',
+          '[Educational Market Concept: Stocks & Equities]\n\nA stock represents real fractional ownership in a listed corporation (e.g. Reliance, TCS, HDFC Bank). When the company generates profits and expands, the share price tends to appreciate and companies may distribute cash dividends to shareholders.\n\nMinty Finance allows you to practice whole-share simulated orders using live NSE market data without risking real money.',
         suggestedPrompts: [
           'How do I calculate simulated charges?',
           'What is the Pre-Investment Checklist?',
@@ -153,7 +153,7 @@ export const AIAdvisorService = {
     // Default financial explainer
     return {
       message:
-        `[Minti Finance Educational Assistant]\n\nHello! I am your interactive financial learning companion. You have ${formatCurrency(
+        `[Minty Finance Educational Assistant]\n\nHello! I am your interactive financial learning companion. You have ${formatCurrency(
         context.currentCash
       )} in virtual practice capital.\n\nAsk me about:\n• Financial valuation metrics (P/E, Debt-to-Equity, ROE, EPS)\n• How stock markets and benchmark indices (NIFTY 50, SENSEX) work\n• Why your virtual portfolio moves with real market data\n• Budgeting principles and the 50/30/20 rule\n• Compound interest and long-term asset allocation`,
       suggestedPrompts: [

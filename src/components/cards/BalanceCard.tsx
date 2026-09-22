@@ -25,7 +25,7 @@ export const BalanceCard: React.FC = () => {
     <View style={styles.card}>
       {/* Top Header */}
       <View style={styles.headerRow}>
-        <Text style={styles.brandTitle}>Minti Finance</Text>
+        <Text style={styles.brandTitle}>Minty Finance</Text>
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={() => openModal('simulation_info')}

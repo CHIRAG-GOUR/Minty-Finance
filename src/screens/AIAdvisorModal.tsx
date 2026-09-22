@@ -35,7 +35,7 @@ export const AIAdvisorModal: React.FC<AIAdvisorModalProps> = ({ visible, onClose
       const greetingMsg: AIChatMessage = {
         id: 'msg-init',
         sender: 'assistant',
-        text: `Hello ${userProfile.name}! I'm your Minti Financial Advisor. ${initialAdvice.message}`,
+        text: `Hello ${userProfile.name}! I'm your Minty Financial Advisor. ${initialAdvice.message}`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         suggestions: initialAdvice.suggestedPrompts,
       };
@@ -83,7 +83,7 @@ export const AIAdvisorModal: React.FC<AIAdvisorModalProps> = ({ visible, onClose
     <ModalWrapper
       visible={visible}
       onClose={onClose}
-      title="Minti Financial Advisor"
+      title="Minty Financial Advisor"
       subtitle="Personalized budget analysis & teen financial guidance"
       iconName="tip"
     >
@@ -119,7 +119,7 @@ export const AIAdvisorModal: React.FC<AIAdvisorModalProps> = ({ visible, onClose
                         { color: isBot ? THEME.colors.secondary : THEME.colors.textInverse },
                       ]}
                     >
-                      {isBot ? 'Minti Advisor' : 'You'}
+                      {isBot ? 'Minty Advisor' : 'You'}
                     </Text>
                   </View>
                   <Text

@@ -34,7 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
               <Text style={styles.nameHighlight}>{userProfile.name}</Text>
             </Text>
             <Text style={styles.subtext}>
-              Minti is ready for your next financial challenge.
+              Minty is ready for your next financial challenge.
             </Text>
           </>
         ) : (

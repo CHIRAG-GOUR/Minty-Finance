@@ -163,11 +163,11 @@ export const BudgetScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Minti Contextual Tips */}
+        {/* Minty Contextual Tips */}
         <View style={styles.mintiTipsCard}>
           <View style={styles.mintiTipHeader}>
             <Icon name="tip" size={18} color={THEME.colors.amber} />
-            <Text style={styles.mintiTipTitle}>Minti Budgeting Tips</Text>
+            <Text style={styles.mintiTipTitle}>Minty Budgeting Tips</Text>
           </View>
           {savingsRatePercent < 20 ? (
             <Text style={styles.mintiTipBody}>

@@ -180,7 +180,7 @@ const StockTradeModalBody: React.FC<StockTradeModalProps> = ({ visible, data, on
     if (!stock) return;
     try {
       await Share.share({
-        message: `Tracking ${stock.name} (${stock.symbol}) on Minti Finance. Current price: ${formatCurrencyOrDash(
+        message: `Tracking ${stock.name} (${stock.symbol}) on Minty Finance. Current price: ${formatCurrencyOrDash(
           price,
           true
         )} (${formatPercentage(stock.changePercent)}).`,

@@ -453,7 +453,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setUserProfile(updated);
     await FirebaseService.updateUserProfile(updated);
     await StorageService.saveUserProfile(updated);
-    showToast('Welcome to Minti Finance!', '₹1,00,000 virtual money credited for investment practice.', 'success');
+    showToast('Welcome to Minty Finance!', '₹1,00,000 virtual money credited for investment practice.', 'success');
   };
 
   const buyStock = async (symbol: string, shares: number): Promise<boolean> => {
