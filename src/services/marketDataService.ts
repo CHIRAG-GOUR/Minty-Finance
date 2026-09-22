@@ -245,6 +245,442 @@ export class DeterministicMarketDataProvider implements IMarketDataProvider {
   }
 }
 
+/**
+ * Comprehensive dictionary of Indian & Global stock aliases, brands, abbreviations, and conglomerates.
+ * Guarantees that searching colloquial company names immediately resolves to authentic exchange tickers.
+ */
+export const STOCK_ALIAS_MAP: Record<string, string[]> = {
+  // Food, Delivery & Quick Commerce
+  ZOMATO: ['ETERNAL.NS', 'ZOMATO.NS', 'ETERNAL.BO', 'ZOMATO.BO'],
+  SWIGGY: ['SWIGGY.NS', 'SWIGGY.BO'],
+  DEVYANI: ['DEVYANI.NS', 'DEVYANI.BO'],
+  JUBILANT: ['JUBLFOOD.NS', 'JUBLFOOD.BO'],
+  DOMINOS: ['JUBLFOOD.NS', 'JUBLFOOD.BO'],
+  WESTLIFE: ['WESTLIFE.NS', 'WESTLIFE.BO'],
+  MCDONALDS: ['WESTLIFE.NS', 'MCD'],
+  'BURGER KING': ['RBA.NS', 'RBA.BO'],
+  RBA: ['RBA.NS', 'RBA.BO'],
+
+  // Tech, E-commerce & Startups
+  PAYTM: ['PAYTM.NS', 'PAYTM.BO'],
+  ONE97: ['PAYTM.NS', 'PAYTM.BO'],
+  NYKAA: ['NYKAA.NS', 'NYKAA.BO'],
+  FSN: ['NYKAA.NS', 'NYKAA.BO'],
+  POLICYBAZAAR: ['POLICYBZR.NS', 'POLICYBZR.BO'],
+  'PB FINTECH': ['POLICYBZR.NS', 'POLICYBZR.BO'],
+  DELHIVERY: ['DELHIVERY.NS', 'DELHIVERY.BO'],
+  OLA: ['OLAELEC.NS', 'OLAELEC.BO'],
+  'OLA ELECTRIC': ['OLAELEC.NS', 'OLAELEC.BO'],
+  OLAELEC: ['OLAELEC.NS', 'OLAELEC.BO'],
+  MAMAEARTH: ['HONASA.NS', 'HONASA.BO'],
+  HONASA: ['HONASA.NS', 'HONASA.BO'],
+  MAPMYINDIA: ['MAPMYINDIA.NS', 'MAPMYINDIA.BO'],
+  CEINFO: ['MAPMYINDIA.NS'],
+  RATEGAIN: ['RATEGAIN.NS', 'RATEGAIN.BO'],
+  EASEMYTRIP: ['EASEMYTRIP.NS', 'EASEMYTRIP.BO'],
+  YATRA: ['YATRA.NS', 'YATRA.BO'],
+  NAZARA: ['NAZARA.NS', 'NAZARA.BO'],
+  JUSTDIAL: ['JUSTDIAL.NS', 'JUSTDIAL.BO'],
+  INDIAMART: ['INDIAMART.NS', 'INDIAMART.BO'],
+  INFOEDGE: ['NAUKRI.NS', 'NAUKRI.BO'],
+  NAUKRI: ['NAUKRI.NS', 'NAUKRI.BO'],
+
+  // IT Services & Tech Providers
+  TCS: ['TCS.NS', 'TCS.BO'],
+  INFOSYS: ['INFY.NS', 'INFY.BO', 'INFY'],
+  INFY: ['INFY.NS', 'INFY.BO', 'INFY'],
+  WIPRO: ['WIPRO.NS', 'WIPRO.BO', 'WIT'],
+  HCL: ['HCLTECH.NS', 'HCLTECH.BO'],
+  'HCL TECH': ['HCLTECH.NS', 'HCLTECH.BO'],
+  HCLTECH: ['HCLTECH.NS', 'HCLTECH.BO'],
+  'TECH MAHINDRA': ['TECHM.NS', 'TECHM.BO'],
+  TECHM: ['TECHM.NS', 'TECHM.BO'],
+  LTIMINDTREE: ['LTIM.NS', 'LTIM.BO'],
+  LTIM: ['LTIM.NS', 'LTIM.BO'],
+  LTTS: ['LTTS.NS', 'LTTS.BO'],
+  'L&T TECH': ['LTTS.NS', 'LTTS.BO'],
+  PERSISTENT: ['PERSISTENT.NS', 'PERSISTENT.BO'],
+  COFORGE: ['COFORGE.NS', 'COFORGE.BO'],
+  MPHASIS: ['MPHASIS.NS', 'MPHASIS.BO'],
+  'TATA ELXSI': ['TATAELXSI.NS', 'TATAELXSI.BO'],
+  TATAELXSI: ['TATAELXSI.NS', 'TATAELXSI.BO'],
+  'TATA TECH': ['TATATECH.NS', 'TATATECH.BO'],
+  TATATECH: ['TATATECH.NS', 'TATATECH.BO'],
+  KPIT: ['KPITTECH.NS', 'KPITTECH.BO'],
+  CYIENT: ['CYIENT.NS', 'CYIENT.BO'],
+  ZENSAR: ['ZENSARTECH.NS', 'ZENSARTECH.BO'],
+  ORACLE: ['OFSS.NS', 'ORCL'],
+  OFSS: ['OFSS.NS', 'OFSS.BO'],
+
+  // Conglomerates & Tata Group
+  'TATA MOTORS': ['TMPV.NS', 'TMCV.NS', 'TATAMOTORS.NS', 'TATAMOTORS.BO'],
+  TATAMOTORS: ['TMPV.NS', 'TMCV.NS', 'TATAMOTORS.NS', 'TATAMOTORS.BO'],
+  TMPV: ['TMPV.NS', 'TMPV.BO'],
+  TMCV: ['TMCV.NS', 'TMCV.BO'],
+  'TATA POWER': ['TATAPOWER.NS', 'TATAPOWER.BO'],
+  TATAPOWER: ['TATAPOWER.NS', 'TATAPOWER.BO'],
+  'TATA STEEL': ['TATASTEEL.NS', 'TATASTEEL.BO'],
+  TATASTEEL: ['TATASTEEL.NS', 'TATASTEEL.BO'],
+  'TATA CONSUMER': ['TATACONSUM.NS', 'TATACONSUM.BO'],
+  TATACONSUM: ['TATACONSUM.NS', 'TATACONSUM.BO'],
+  'TATA CHEMICALS': ['TATACHEM.NS', 'TATACHEM.BO'],
+  TATACHEM: ['TATACHEM.NS', 'TATACHEM.BO'],
+  'TATA COMM': ['TATACOMM.NS', 'TATACOMM.BO'],
+  TATACOMM: ['TATACOMM.NS', 'TATACOMM.BO'],
+  TRENT: ['TRENT.NS', 'TRENT.BO'],
+  TITAN: ['TITAN.NS', 'TITAN.BO'],
+  VOLTAS: ['VOLTAS.NS', 'VOLTAS.BO'],
+
+  // Infrastructure, L&T & Capital Goods
+  'L&T': ['LT.NS', 'LT.BO', 'LTIM.NS', 'LTTS.NS'],
+  LARSEN: ['LT.NS', 'LT.BO', 'LTIM.NS', 'LTTS.NS'],
+  'LARSEN & TOUBRO': ['LT.NS', 'LT.BO'],
+  LT: ['LT.NS', 'LT.BO'],
+  SIEMENS: ['SIEMENS.NS', 'SIEMENS.BO'],
+  ABB: ['ABB.NS', 'ABB.BO'],
+  BHEL: ['BHEL.NS', 'BHEL.BO'],
+  BEL: ['BEL.NS', 'BEL.BO'],
+  HAL: ['HAL.NS', 'HAL.BO'],
+  'HINDUSTAN AERONAUTICS': ['HAL.NS', 'HAL.BO'],
+  'BHARAT ELECTRONICS': ['BEL.NS', 'BEL.BO'],
+  MAZAGON: ['MAZDOCK.NS', 'MAZDOCK.BO'],
+  MAZDOCK: ['MAZDOCK.NS', 'MAZDOCK.BO'],
+  'COCHIN SHIPYARD': ['COCHINSHIP.NS', 'COCHINSHIP.BO'],
+  COCHINSHIP: ['COCHINSHIP.NS', 'COCHINSHIP.BO'],
+  GRSE: ['GRSE.NS', 'GRSE.BO'],
+  BDL: ['BDL.NS', 'BDL.BO'],
+  'DATA PATTERNS': ['DATAPATTNS.NS', 'DATAPATTNS.BO'],
+  PARAS: ['PARAS.NS', 'PARAS.BO'],
+
+  // Auto & Tyres
+  'M&M': ['M&M.NS', 'M&M.BO', 'TECHM.NS'],
+  MAHINDRA: ['M&M.NS', 'M&M.BO', 'TECHM.NS', 'M&MFIN.NS'],
+  'MAHINDRA & MAHINDRA': ['M&M.NS', 'M&M.BO'],
+  MARUTI: ['MARUTI.NS', 'MARUTI.BO'],
+  'MARUTI SUZUKI': ['MARUTI.NS', 'MARUTI.BO'],
+  HYUNDAI: ['HYUNDAI.NS', 'HYUNDAI.BO'],
+  'BAJAJ AUTO': ['BAJAJ-AUTO.NS', 'BAJAJ-AUTO.BO'],
+  HERO: ['HEROMOTOCO.NS', 'HEROMOTOCO.BO'],
+  'HERO MOTOCORP': ['HEROMOTOCO.NS', 'HEROMOTOCO.BO'],
+  HEROMOTOCO: ['HEROMOTOCO.NS', 'HEROMOTOCO.BO'],
+  TVS: ['TVSMOTOR.NS', 'TVSMOTOR.BO'],
+  'TVS MOTOR': ['TVSMOTOR.NS', 'TVSMOTOR.BO'],
+  TVSMOTOR: ['TVSMOTOR.NS', 'TVSMOTOR.BO'],
+  EICHER: ['EICHERMOT.NS', 'EICHERMOT.BO'],
+  'EICHER MOTORS': ['EICHERMOT.NS', 'EICHERMOT.BO'],
+  'ROYAL ENFIELD': ['EICHERMOT.NS', 'EICHERMOT.BO'],
+  'ASHOK LEYLAND': ['ASHOKLEY.NS', 'ASHOKLEY.BO'],
+  ASHOKLEY: ['ASHOKLEY.NS', 'ASHOKLEY.BO'],
+  'BHARAT FORGE': ['BHARATFORG.NS', 'BHARATFORG.BO'],
+  MRF: ['MRF.NS', 'MRF.BO'],
+  'APOLLO TYRES': ['APOLLOTYRE.NS', 'APOLLOTYRE.BO'],
+  APOLLOTYRE: ['APOLLOTYRE.NS', 'APOLLOTYRE.BO'],
+  CEAT: ['CEATLTD.NS', 'CEATLTD.BO'],
+  BALKRISHNA: ['BALKRISIND.NS', 'BALKRISIND.BO'],
+
+  // Banking & Financial Services
+  SBI: ['SBIN.NS', 'SBICARD.NS', 'SBILIFE.NS', 'SBIN.BO'],
+  'STATE BANK': ['SBIN.NS', 'SBIN.BO', 'SBICARD.NS', 'SBILIFE.NS'],
+  SBIN: ['SBIN.NS', 'SBIN.BO'],
+  HDFC: ['HDFCBANK.NS', 'HDFCLIFE.NS', 'HDFCAMC.NS', 'HDFCBANK.BO'],
+  'HDFC BANK': ['HDFCBANK.NS', 'HDFCBANK.BO'],
+  HDFCBANK: ['HDFCBANK.NS', 'HDFCBANK.BO'],
+  ICICI: ['ICICIBANK.NS', 'ICICIPRULI.NS', 'ICICIGI.NS', 'ICICIBANK.BO'],
+  'ICICI BANK': ['ICICIBANK.NS', 'ICICIBANK.BO'],
+  ICICIBANK: ['ICICIBANK.NS', 'ICICIBANK.BO'],
+  KOTAK: ['KOTAKBANK.NS', 'KOTAKBANK.BO'],
+  'KOTAK BANK': ['KOTAKBANK.NS', 'KOTAKBANK.BO'],
+  KOTAKBANK: ['KOTAKBANK.NS', 'KOTAKBANK.BO'],
+  AXIS: ['AXISBANK.NS', 'AXISBANK.BO'],
+  'AXIS BANK': ['AXISBANK.NS', 'AXISBANK.BO'],
+  AXISBANK: ['AXISBANK.NS', 'AXISBANK.BO'],
+  INDUSIND: ['INDUSINDBK.NS', 'INDUSINDBK.BO'],
+  'YES BANK': ['YESBANK.NS', 'YESBANK.BO'],
+  YESBANK: ['YESBANK.NS', 'YESBANK.BO'],
+  IDFC: ['IDFCFIRSTB.NS', 'IDFCFIRSTB.BO'],
+  'IDFC FIRST': ['IDFCFIRSTB.NS', 'IDFCFIRSTB.BO'],
+  IDFCFIRSTB: ['IDFCFIRSTB.NS', 'IDFCFIRSTB.BO'],
+  FEDERAL: ['FEDERALBNK.NS', 'FEDERALBNK.BO'],
+  'FEDERAL BANK': ['FEDERALBNK.NS', 'FEDERALBNK.BO'],
+  BANDHAN: ['BANDHANBNK.NS', 'BANDHANBNK.BO'],
+  'BANDHAN BANK': ['BANDHANBNK.NS', 'BANDHANBNK.BO'],
+  PNB: ['PNB.NS', 'PNB.BO'],
+  'BANK OF BARODA': ['BANKBARODA.NS', 'BANKBARODA.BO'],
+  BOB: ['BANKBARODA.NS', 'BANKBARODA.BO'],
+  BANKBARODA: ['BANKBARODA.NS', 'BANKBARODA.BO'],
+  CANARA: ['CANBK.NS', 'CANBK.BO'],
+  'CANARA BANK': ['CANBK.NS', 'CANBK.BO'],
+  CANBK: ['CANBK.NS', 'CANBK.BO'],
+  UNION: ['UNIONBANK.NS', 'UNIONBANK.BO'],
+  'UNION BANK': ['UNIONBANK.NS', 'UNIONBANK.BO'],
+  'INDIAN BANK': ['INDIANB.NS', 'INDIANB.BO'],
+  'BAJAJ FINANCE': ['BAJFINANCE.NS', 'BAJFINANCE.BO'],
+  BAJFINANCE: ['BAJFINANCE.NS', 'BAJFINANCE.BO'],
+  'BAJAJ FINSERV': ['BAJAJFINSV.NS', 'BAJAJFINSV.BO'],
+  BAJAJFINSV: ['BAJAJFINSV.NS', 'BAJAJFINSV.BO'],
+  BAJAJ: ['BAJFINANCE.NS', 'BAJAJFINSV.NS', 'BAJAJ-AUTO.NS'],
+  'JIO FINANCIAL': ['JIOFIN.NS', 'JIOFIN.BO'],
+  JIO: ['JIOFIN.NS', 'JIOFIN.BO'],
+  JIOFIN: ['JIOFIN.NS', 'JIOFIN.BO'],
+  JFS: ['JIOFIN.NS'],
+  CHOLA: ['CHOLAFIN.NS', 'CHOLAFIN.BO'],
+  'CHOLAMANDALAM FINANCE': ['CHOLAFIN.NS'],
+  SHRIRAM: ['SHRIRAMFIN.NS', 'SHRIRAMFIN.BO'],
+  'SHRIRAM FINANCE': ['SHRIRAMFIN.NS'],
+  MUTHOOT: ['MUTHOOTFIN.NS', 'MUTHOOTFIN.BO'],
+  'MUTHOOT FINANCE': ['MUTHOOTFIN.NS'],
+  MANAPPURAM: ['MANAPPURAM.NS', 'MANAPPURAM.BO'],
+  CDSL: ['CDSL.NS', 'CDSL.BO'],
+  BSE: ['BSE.NS', 'BSE.BO'],
+  MCX: ['MCX.NS', 'MCX.BO'],
+  CAMS: ['CAMS.NS', 'CAMS.BO'],
+  KFINTECH: ['KFINTECH.NS', 'KFINTECH.BO'],
+  'ANGEL ONE': ['ANGELONE.NS', 'ANGELONE.BO'],
+  ANGELONE: ['ANGELONE.NS', 'ANGELONE.BO'],
+  MOTILAL: ['MOTILALOFS.NS', 'MOTILALOFS.BO'],
+  LIC: ['LICI.NS', 'LICI.BO'],
+  LICI: ['LICI.NS', 'LICI.BO'],
+  'STAR HEALTH': ['STARHEALTH.NS', 'STARHEALTH.BO'],
+  'MAX FINANCIAL': ['MFSL.NS', 'MFSL.BO'],
+
+  // Adani Group
+  ADANI: ['ADANIENT.NS', 'ADANIPORTS.NS', 'ADANIPOWER.NS', 'ADANIGREEN.NS', 'ATGL.NS', 'ADANIENSOL.NS', 'AWL.NS'],
+  'ADANI ENT': ['ADANIENT.NS', 'ADANIENT.BO'],
+  'ADANI ENTERPRISES': ['ADANIENT.NS', 'ADANIENT.BO'],
+  ADANIENT: ['ADANIENT.NS', 'ADANIENT.BO'],
+  'ADANI PORTS': ['ADANIPORTS.NS', 'ADANIPORTS.BO'],
+  ADANIPORTS: ['ADANIPORTS.NS', 'ADANIPORTS.BO'],
+  'ADANI POWER': ['ADANIPOWER.NS', 'ADANIPOWER.BO'],
+  ADANIPOWER: ['ADANIPOWER.NS', 'ADANIPOWER.BO'],
+  'ADANI GREEN': ['ADANIGREEN.NS', 'ADANIGREEN.BO'],
+  ADANIGREEN: ['ADANIGREEN.NS', 'ADANIGREEN.BO'],
+  'ADANI TOTAL': ['ATGL.NS', 'ATGL.BO'],
+  ATGL: ['ATGL.NS', 'ATGL.BO'],
+  'ADANI ENERGY': ['ADANIENSOL.NS', 'ADANIENSOL.BO'],
+  ADANIENSOL: ['ADANIENSOL.NS', 'ADANIENSOL.BO'],
+  'ADANI WILMAR': ['AWL.NS', 'AWL.BO'],
+  AWL: ['AWL.NS', 'AWL.BO'],
+  AMBUJA: ['AMBUJACEM.NS', 'AMBUJACEM.BO'],
+  'AMBUJA CEMENTS': ['AMBUJACEM.NS'],
+  ACC: ['ACC.NS', 'ACC.BO'],
+
+  // Oil, Energy, Renewables & Utilities
+  RELIANCE: ['RELIANCE.NS', 'RELIANCE.BO'],
+  RIL: ['RELIANCE.NS', 'RELIANCE.BO'],
+  ONGC: ['ONGC.NS', 'ONGC.BO'],
+  'OIL INDIA': ['OIL.NS', 'OIL.BO'],
+  BPCL: ['BPCL.NS', 'BPCL.BO'],
+  IOC: ['IOC.NS', 'IOC.BO'],
+  'INDIAN OIL': ['IOC.NS', 'IOC.BO'],
+  HPCL: ['HPCL.NS', 'HPCL.BO'],
+  GAIL: ['GAIL.NS', 'GAIL.BO'],
+  NTPC: ['NTPC.NS', 'NTPC.BO'],
+  'POWER GRID': ['POWERGRID.NS', 'POWERGRID.BO'],
+  POWERGRID: ['POWERGRID.NS', 'POWERGRID.BO'],
+  'COAL INDIA': ['COALINDIA.NS', 'COALINDIA.BO'],
+  COALINDIA: ['COALINDIA.NS', 'COALINDIA.BO'],
+  NHPC: ['NHPC.NS', 'NHPC.BO'],
+  SJVN: ['SJVN.NS', 'SJVN.BO'],
+  IREDA: ['IREDA.NS', 'IREDA.BO'],
+  PFC: ['PFC.NS', 'PFC.BO'],
+  REC: ['REC.NS', 'REC.BO'],
+  SUZLON: ['SUZLON.NS', 'SUZLON.BO'],
+  'INOX WIND': ['INOXWIND.NS', 'INOXWIND.BO'],
+  INOXWIND: ['INOXWIND.NS', 'INOXWIND.BO'],
+  WAAREE: ['WAAREEENER.NS', 'WAAREEENER.BO'],
+  'WAAREE ENERGIES': ['WAAREEENER.NS', 'WAAREEENER.BO'],
+  PREMIER: ['PREMIERENE.NS', 'PREMIERENE.BO'],
+  'PREMIER ENERGIES': ['PREMIERENE.NS', 'PREMIERENE.BO'],
+
+  // Railways & PSU
+  IRCTC: ['IRCTC.NS', 'IRCTC.BO'],
+  IRFC: ['IRFC.NS', 'IRFC.BO'],
+  RVNL: ['RVNL.NS', 'RVNL.BO'],
+  RITES: ['RITES.NS', 'RITES.BO'],
+  IRCON: ['IRCON.NS', 'IRCON.BO'],
+  RAILTEL: ['RAILTEL.NS', 'RAILTEL.BO'],
+  TITAGARH: ['TITAGARH.NS', 'TITAGARH.BO'],
+  JUPITER: ['JWL.NS', 'JWL.BO'],
+
+  // Metals & Mining
+  'JSW STEEL': ['JSWSTEEL.NS', 'JSWSTEEL.BO'],
+  JSWSTEEL: ['JSWSTEEL.NS', 'JSWSTEEL.BO'],
+  'JSW ENERGY': ['JSWENERGY.NS', 'JSWENERGY.BO'],
+  VEDANTA: ['VEDL.NS', 'VEDL.BO'],
+  VEDL: ['VEDL.NS', 'VEDL.BO'],
+  HINDALCO: ['HINDALCO.NS', 'HINDALCO.BO'],
+  NALCO: ['NATIONALUM.NS', 'NATIONALUM.BO'],
+  NATIONALUM: ['NATIONALUM.NS', 'NATIONALUM.BO'],
+  NMDC: ['NMDC.NS', 'NMDC.BO'],
+  SAIL: ['SAIL.NS', 'SAIL.BO'],
+  'JINDAL STEEL': ['JINDALSTEL.NS', 'JINDALSTEL.BO'],
+  JINDALSTEL: ['JINDALSTEL.NS', 'JINDALSTEL.BO'],
+  'JINDAL STAINLESS': ['JSL.NS', 'JSL.BO'],
+
+  // Pharma & Healthcare
+  'SUN PHARMA': ['SUNPHARMA.NS', 'SUNPHARMA.BO'],
+  SUNPHARMA: ['SUNPHARMA.NS', 'SUNPHARMA.BO'],
+  'DR REDDY': ['DRREDDY.NS', 'DRREDDY.BO', 'RDY'],
+  'DR REDDYS': ['DRREDDY.NS', 'DRREDDY.BO', 'RDY'],
+  DRREDDY: ['DRREDDY.NS', 'DRREDDY.BO', 'RDY'],
+  CIPLA: ['CIPLA.NS', 'CIPLA.BO'],
+  DIVIS: ['DIVISLAB.NS', 'DIVISLAB.BO'],
+  DIVISLAB: ['DIVISLAB.NS', 'DIVISLAB.BO'],
+  'APOLLO HOSPITALS': ['APOLLOHOSP.NS', 'APOLLOHOSP.BO'],
+  APOLLOHOSP: ['APOLLOHOSP.NS', 'APOLLOHOSP.BO'],
+  LUPIN: ['LUPIN.NS', 'LUPIN.BO'],
+  AUROBINDO: ['AUROPHARMA.NS', 'AUROPHARMA.BO'],
+  BIOCON: ['BIOCON.NS', 'BIOCON.BO'],
+  TORRENT: ['TORNTPHARM.NS', 'TORNTPHARM.BO'],
+  'TORRENT PHARMA': ['TORNTPHARM.NS', 'TORNTPHARM.BO'],
+  ZYDUS: ['ZYDUSLIFE.NS', 'ZYDUSLIFE.BO'],
+  MANKIND: ['MANKIND.NS', 'MANKIND.BO'],
+  'MANKIND PHARMA': ['MANKIND.NS', 'MANKIND.BO'],
+  'MAX HEALTH': ['MAXHEALTH.NS', 'MAXHEALTH.BO'],
+  MAXHEALTH: ['MAXHEALTH.NS', 'MAXHEALTH.BO'],
+  FORTIS: ['FORTIS.NS', 'FORTIS.BO'],
+
+  // FMCG, Retail & Consumer
+  ITC: ['ITC.NS', 'ITC.BO'],
+  HUL: ['HINDUNILVR.NS', 'HINDUNILVR.BO'],
+  'HINDUSTAN UNILEVER': ['HINDUNILVR.NS', 'HINDUNILVR.BO'],
+  HINDUNILVR: ['HINDUNILVR.NS', 'HINDUNILVR.BO'],
+  NESTLE: ['NESTLEIND.NS', 'NESTLEIND.BO'],
+  NESTLEIND: ['NESTLEIND.NS', 'NESTLEIND.BO'],
+  BRITANNIA: ['BRITANNIA.NS', 'BRITANNIA.BO'],
+  DABUR: ['DABUR.NS', 'DABUR.BO'],
+  MARICO: ['MARICO.NS', 'MARICO.BO'],
+  GODREJ: ['GODREJCP.NS', 'GODREJPROP.NS', 'GODREJIND.NS'],
+  'GODREJ CONSUMER': ['GODREJCP.NS', 'GODREJCP.BO'],
+  GODREJCP: ['GODREJCP.NS', 'GODREJCP.BO'],
+  COLGATE: ['COLPAL.NS', 'COLPAL.BO'],
+  COLPAL: ['COLPAL.NS', 'COLPAL.BO'],
+  'VARUN BEVERAGES': ['VBL.NS', 'VBL.BO'],
+  VBL: ['VBL.NS', 'VBL.BO'],
+  PIDILITE: ['PIDILITIND.NS', 'PIDILITIND.BO'],
+  PIDILITIND: ['PIDILITIND.NS', 'PIDILITIND.BO'],
+  FEVICOL: ['PIDILITIND.NS', 'PIDILITIND.BO'],
+  'ASIAN PAINTS': ['ASIANPAINT.NS', 'ASIANPAINT.BO'],
+  ASIANPAINT: ['ASIANPAINT.NS', 'ASIANPAINT.BO'],
+  BERGER: ['BERGEPAINT.NS', 'BERGEPAINT.BO'],
+  'BERGER PAINTS': ['BERGEPAINT.NS'],
+  DMART: ['DMART.NS', 'DMART.BO'],
+  'AVENUE SUPERMARTS': ['DMART.NS', 'DMART.BO'],
+  KALYAN: ['KALYANKJIL.NS', 'KALYANKJIL.BO'],
+  'KALYAN JEWELLERS': ['KALYANKJIL.NS'],
+  BATA: ['BATAINDIA.NS', 'BATAINDIA.BO'],
+  'PAGE INDUSTRIES': ['PAGEIND.NS', 'PAGEIND.BO'],
+  JOCKEY: ['PAGEIND.NS', 'PAGEIND.BO'],
+
+  // Electronics & EMS
+  DIXON: ['DIXON.NS', 'DIXON.BO'],
+  KAYNES: ['KAYNES.NS', 'KAYNES.BO'],
+  AMBER: ['AMBER.NS', 'AMBER.BO'],
+  SYRMA: ['SYRMA.NS', 'SYRMA.BO'],
+
+  // Telecom & Aviation
+  AIRTEL: ['BHARTIARTL.NS', 'BHARTIARTL.BO'],
+  BHARTI: ['BHARTIARTL.NS', 'BHARTIARTL.BO'],
+  BHARTIARTL: ['BHARTIARTL.NS', 'BHARTIARTL.BO'],
+  IDEA: ['IDEA.NS', 'IDEA.BO'],
+  VI: ['IDEA.NS', 'IDEA.BO'],
+  INDIGO: ['INDIGO.NS', 'INDIGO.BO'],
+  INTERGLOBE: ['INDIGO.NS', 'INDIGO.BO'],
+  SPICEJET: ['SPICEJET.NS', 'SPICEJET.BO'],
+
+  // Global Equities
+  APPLE: ['AAPL'],
+  AAPL: ['AAPL'],
+  MICROSOFT: ['MSFT'],
+  MSFT: ['MSFT'],
+  GOOGLE: ['GOOGL', 'GOOG'],
+  ALPHABET: ['GOOGL', 'GOOG'],
+  GOOGL: ['GOOGL'],
+  AMAZON: ['AMZN'],
+  AMZN: ['AMZN'],
+  TESLA: ['TSLA'],
+  TSLA: ['TSLA'],
+  NVIDIA: ['NVDA'],
+  NVDA: ['NVDA'],
+  META: ['META'],
+  FACEBOOK: ['META'],
+  NETFLIX: ['NFLX'],
+  NFLX: ['NFLX'],
+  AMD: ['AMD'],
+  INTEL: ['INTC'],
+  INTC: ['INTC'],
+  QUALCOMM: ['QCOM'],
+  QCOM: ['QCOM'],
+  BROADCOM: ['AVGO'],
+  AVGO: ['AVGO'],
+  BERKSHIRE: ['BRK-B'],
+  COINBASE: ['COIN'],
+};
+
+/**
+ * Strict and intelligent alias matcher.
+ * Matches exact terms, sub-tokens, and intentional prefixes without false-matching composite garbage queries.
+ */
+export function isAliasMatch(queryUpper: string, aliasKey: string): boolean {
+  if (queryUpper === aliasKey) return true;
+  const qTokens = queryUpper.split(/[\s,._-]+/).filter((t) => t.length >= 2);
+  const aTokens = aliasKey.split(/[\s,._-]+/).filter((t) => t.length >= 2);
+
+  if (aTokens.length > 0 && qTokens.length > 0) {
+    if (qTokens.every((qt) => aTokens.some((at) => at === qt || at.startsWith(qt)))) {
+      return true;
+    }
+  }
+
+  if (queryUpper.length >= 3 && aliasKey.startsWith(queryUpper)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Evaluates whether a candidate stock symbol / company name is truly relevant to the user query.
+ * Prevents fuzzy noise from showing unrelated stocks, while guaranteeing real matches pass.
+ */
+function isRelevantStockMatch(query: string, symbol: string, name: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return false;
+
+  const s = (symbol || '').toLowerCase();
+  const cleanSymbol = s.replace(/\.(ns|bo)$/, '');
+  const n = (name || '').toLowerCase();
+
+  // 1. Exact or direct symbol match
+  if (s === q || cleanSymbol === q || s.startsWith(q) || cleanSymbol.startsWith(q)) {
+    return true;
+  }
+
+  // 2. Exact or substring name match
+  if (n.includes(q)) {
+    return true;
+  }
+
+  // 3. Token match: All user search tokens (min length 2) present in either name or symbol
+  const tokens = q.split(/\s+/).filter((t) => t.length >= 2);
+  if (tokens.length > 0) {
+    const allMatch = tokens.every((token) => n.includes(token) || s.includes(token));
+    if (allMatch) return true;
+  }
+
+  // 4. Alias match lookup
+  const upperQ = q.toUpperCase();
+  for (const [aliasKey, aliasSymbols] of Object.entries(STOCK_ALIAS_MAP)) {
+    if (isAliasMatch(upperQ, aliasKey)) {
+      if (aliasSymbols.some((asym) => asym.toLowerCase() === s || asym.toLowerCase() === cleanSymbol)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 /** How long a network request may hang before failing over to fallback. */
 const REQUEST_TIMEOUT_MS = 6000;
 
@@ -493,7 +929,10 @@ export class LiveMarketDataProvider implements IMarketDataProvider {
   }
 
   /**
-   * Real-time search across live exchanges (NSE, BSE, Global) via Yahoo Finance API
+   * Real-time search across live exchanges (NSE, BSE, Global) via Yahoo Finance API.
+   * Leverages multi-strategy candidate generation, comprehensive alias mapping, and
+   * strict relevance verification so real stocks are found with live numbers while
+   * non-existent stocks return zero false positives.
    */
   async searchLiveYahoo(query: string): Promise<StockItem[]> {
     const q = query.trim();
@@ -506,14 +945,33 @@ export class LiveMarketDataProvider implements IMarketDataProvider {
     }
 
     const upperQ = q.toUpperCase();
-    const directCandidates = [
-      upperQ.endsWith('.NS') || upperQ.endsWith('.BO') || upperQ.startsWith('^')
-        ? upperQ
-        : `${upperQ}.NS`,
-      upperQ,
-      `${upperQ}.BO`,
-    ];
+    const cleanQ = upperQ.replace(/[^A-Z0-9]/g, '');
 
+    const candidateSymbols = new Set<string>();
+
+    // 1. Check comprehensive alias dictionary (Zomato, L&T, Tata Motors, SBI, etc.)
+    for (const [aliasKey, aliasSymbols] of Object.entries(STOCK_ALIAS_MAP)) {
+      if (isAliasMatch(upperQ, aliasKey)) {
+        aliasSymbols.forEach((s) => candidateSymbols.add(s));
+      }
+    }
+
+    // 2. Direct symbol format variations
+    if (upperQ.endsWith('.NS') || upperQ.endsWith('.BO') || upperQ.startsWith('^')) {
+      candidateSymbols.add(upperQ);
+    } else {
+      candidateSymbols.add(`${upperQ}.NS`);
+      candidateSymbols.add(`${upperQ}.BO`);
+      candidateSymbols.add(upperQ);
+    }
+
+    if (cleanQ && cleanQ !== upperQ) {
+      candidateSymbols.add(`${cleanQ}.NS`);
+      candidateSymbols.add(`${cleanQ}.BO`);
+      candidateSymbols.add(cleanQ);
+    }
+
+    // 3. Yahoo Finance fuzzy search API call
     const searchUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(
       q
     )}&quotesCount=10&newsCount=0&enableFuzzyQuery=true`;
@@ -522,193 +980,153 @@ export class LiveMarketDataProvider implements IMarketDataProvider {
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      const [searchRes, ...directResults] = await Promise.allSettled([
-        fetch(searchUrl, {
-          headers: {
-            Accept: 'application/json',
-            'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
-          },
-          signal: controller.signal,
-        }).then((r) => (r.ok ? r.json() : null)),
-        ...directCandidates.map((sym) => this.fetchLiveChartData(sym, '1D')),
-      ]);
+      const searchRes = await fetch(searchUrl, {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
+        },
+        signal: controller.signal,
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null);
 
-      const foundItems: StockItem[] = [];
-      const seenSymbols = new Set<string>();
-
-      // Direct ticker quote resolution
-      directResults.forEach((res) => {
-        if (res.status === 'fulfilled' && res.value && res.value.meta) {
-          const meta = res.value.meta;
-          const livePrice = toFiniteNumber(meta.regularMarketPrice, 0);
-          if (livePrice > 0) {
-            const rawSym = meta.symbol || '';
-            const displaySym = rawSym.replace(/\.(NS|BO)$/, '');
-            const key = instrumentKey(displaySym) || displaySym;
-            if (key && !seenSymbols.has(key.toUpperCase())) {
-              seenSymbols.add(key.toUpperCase());
-              const prevClose = toFiniteNumber(
-                meta.chartPreviousClose ?? meta.previousClose,
-                livePrice
-              );
-              const change = round(livePrice - prevClose, 2);
-              const changePercent = round(safePercent(change, prevClose), 2);
-
-              foundItems.push({
-                id: `stock_live_${key}`,
-                symbol: key,
-                name: meta.longName || meta.shortName || key,
-                exchange:
-                  meta.fullExchangeName === 'BSE' || rawSym.endsWith('.BO')
-                    ? 'BSE'
-                    : meta.fullExchangeName?.includes('Nasdaq') ||
-                      meta.fullExchangeName?.includes('NYSE')
-                    ? 'NYSE/NASDAQ'
-                    : 'NSE',
-                sector: meta.instrumentType === 'ETF' ? 'ETF' : 'Live Market',
-                currentPrice: round(livePrice, 2),
-                openPrice: round(prevClose, 2),
-                dayHigh: round(toFiniteNumber(meta.regularMarketDayHigh, livePrice), 2),
-                dayLow: round(toFiniteNumber(meta.regularMarketDayLow, livePrice), 2),
-                previousClose: round(prevClose, 2),
-                change,
-                changePercent,
-                volume: toFiniteNumber(meta.regularMarketVolume, 500000),
-                fiftyTwoWeekHigh: round(toFiniteNumber(meta.fiftyTwoWeekHigh, livePrice * 1.25), 2),
-                fiftyTwoWeekLow: round(toFiniteNumber(meta.fiftyTwoWeekLow, livePrice * 0.75), 2),
-                risk: 'Moderate',
-                description: `${meta.longName || key} listed on ${
-                  meta.fullExchangeName || 'Exchange'
-                }. Real-time quote fetched live from Yahoo Finance.`,
-                marketCap: 'Live Market Instrument',
-                peRatio: 22.5,
-                eps: round(livePrice / 25, 2),
-                roe: 16.0,
-                debtToEquity: 0.4,
-                dividendYield: 1.0,
-                dataFreshness: 'LIVE',
-                lastTradedTime: new Date().toISOString(),
-                sparkline:
-                  res.value.candles.length >= 7
-                    ? res.value.candles.slice(-7).map((c) => c.close)
-                    : [livePrice],
-                historical1D:
-                  res.value.candles.length > 0 ? res.value.candles.map((c) => c.close) : [livePrice],
-                historical1W: [livePrice],
-                historical1M: [livePrice],
-                historical1Y: [livePrice],
-              });
-            }
-          }
-        }
-      });
-
-      // Fuzzy search quote resolution
-      if (searchRes.status === 'fulfilled' && searchRes.value?.quotes) {
-        const quotes = searchRes.value.quotes as Array<Record<string, unknown>>;
-        const validQuotes = quotes.filter(
-          (item) =>
-            item.quoteType === 'EQUITY' || item.quoteType === 'ETF' || item.quoteType === 'INDEX'
-        );
-
-        const missingQuotes = validQuotes
-          .filter((item) => {
-            const rawSym = String(item.symbol || '');
-            const cleanSym = rawSym.replace(/\.(NS|BO)$/, '').toUpperCase();
-            return cleanSym && !seenSymbols.has(cleanSym);
-          })
-          .slice(0, 6);
-
-        const quoteDetails = await Promise.allSettled(
-          missingQuotes.map((item) => this.fetchLiveChartData(String(item.symbol), '1D'))
-        );
-
-        quoteDetails.forEach((res, idx) => {
-          const item = missingQuotes[idx];
-          if (res.status === 'fulfilled' && res.value && res.value.meta) {
-            const meta = res.value.meta;
-            const livePrice = toFiniteNumber(meta.regularMarketPrice, 0);
-            if (livePrice > 0) {
-              const rawSym = String(item.symbol || '');
-              const displaySym = rawSym.replace(/\.(NS|BO)$/, '');
-              const key = instrumentKey(displaySym) || displaySym;
-              if (key && !seenSymbols.has(key.toUpperCase())) {
-                seenSymbols.add(key.toUpperCase());
-                const prevClose = toFiniteNumber(
-                  meta.chartPreviousClose ?? meta.previousClose,
-                  livePrice
-                );
-                const change = round(livePrice - prevClose, 2);
-                const changePercent = round(safePercent(change, prevClose), 2);
-
-                foundItems.push({
-                  id: `stock_live_${key}`,
-                  symbol: key,
-                  name: String(item.longname || item.shortname || meta.longName || key),
-                  exchange:
-                    item.exchange === 'BSE' || rawSym.endsWith('.BO')
-                      ? 'BSE'
-                      : rawSym.includes('.')
-                      ? 'NSE'
-                      : 'Global',
-                  sector: String(
-                    item.sector ||
-                      item.industry ||
-                      (item.quoteType === 'ETF' ? 'ETF' : 'Live Market')
-                  ),
-                  currentPrice: round(livePrice, 2),
-                  openPrice: round(prevClose, 2),
-                  dayHigh: round(toFiniteNumber(meta.regularMarketDayHigh, livePrice), 2),
-                  dayLow: round(toFiniteNumber(meta.regularMarketDayLow, livePrice), 2),
-                  previousClose: round(prevClose, 2),
-                  change,
-                  changePercent,
-                  volume: toFiniteNumber(meta.regularMarketVolume, 500000),
-                  fiftyTwoWeekHigh: round(
-                    toFiniteNumber(meta.fiftyTwoWeekHigh, livePrice * 1.25),
-                    2
-                  ),
-                  fiftyTwoWeekLow: round(
-                    toFiniteNumber(meta.fiftyTwoWeekLow, livePrice * 0.75),
-                    2
-                  ),
-                  risk: 'Moderate',
-                  description: `${
-                    item.longname || item.shortname || key
-                  } real-time market quote fetched live from Yahoo Finance.`,
-                  marketCap: 'Live Market Instrument',
-                  peRatio: 22.5,
-                  eps: round(livePrice / 25, 2),
-                  roe: 16.0,
-                  debtToEquity: 0.4,
-                  dividendYield: 1.0,
-                  dataFreshness: 'LIVE',
-                  lastTradedTime: new Date().toISOString(),
-                  sparkline:
-                    res.value.candles.length >= 7
-                      ? res.value.candles.slice(-7).map((c) => c.close)
-                      : [livePrice],
-                  historical1D:
-                    res.value.candles.length > 0
-                      ? res.value.candles.map((c) => c.close)
-                      : [livePrice],
-                  historical1W: [livePrice],
-                  historical1M: [livePrice],
-                  historical1Y: [livePrice],
-                });
-              }
+      if (searchRes?.quotes && Array.isArray(searchRes.quotes)) {
+        searchRes.quotes.forEach((item: Record<string, unknown>) => {
+          const quoteType = String(item.quoteType || '').toUpperCase();
+          if (quoteType === 'EQUITY' || quoteType === 'ETF' || quoteType === 'INDEX') {
+            const sym = String(item.symbol || '');
+            if (sym && !sym.includes('=') && !sym.includes(':')) {
+              candidateSymbols.add(sym);
             }
           }
         });
       }
-
-      const normalized = normalizeStockList(foundItems);
-      this.searchCache.set(cacheKey, { results: normalized, timestamp: Date.now() });
-      return normalized;
+    } catch {
+      // Ignore network errors on search endpoint
     } finally {
       clearTimeout(timer);
     }
+
+    // Limit to top 14 candidates to avoid excessive parallel traffic
+    const candidatesList = Array.from(candidateSymbols).slice(0, 14);
+
+    const quotePromises = candidatesList.map(async (sym) => {
+      try {
+        const { meta, candles } = await this.fetchLiveChartData(sym, '1D');
+        const livePrice = toFiniteNumber(meta.regularMarketPrice, 0);
+        if (livePrice > 0) {
+          const rawSymbol = meta.symbol || sym;
+          const displaySymbol = rawSymbol.replace(/\.(NS|BO)$/i, '').toUpperCase();
+          const longName = meta.longName || meta.shortName || displaySymbol;
+
+          // Enforce relevance validation
+          if (!isRelevantStockMatch(q, rawSymbol, longName)) {
+            return null;
+          }
+
+          const prevClose = toFiniteNumber(
+            meta.chartPreviousClose ?? meta.previousClose,
+            livePrice
+          );
+          const change = round(livePrice - prevClose, 2);
+          const changePercent = round(safePercent(change, prevClose), 2);
+          const isBse = meta.fullExchangeName === 'BSE' || rawSymbol.endsWith('.BO');
+          const isNse = meta.fullExchangeName === 'NSE' || rawSymbol.endsWith('.NS');
+          const isUS =
+            meta.fullExchangeName?.includes('Nasdaq') || meta.fullExchangeName?.includes('NYSE');
+
+          // Friendly name annotations for special restructured symbols
+          let formattedName = longName;
+          if (rawSymbol === 'ETERNAL.NS' || rawSymbol === 'ETERNAL.BO') {
+            formattedName = 'Eternal Limited (Zomato)';
+          } else if (rawSymbol === 'TMPV.NS' || rawSymbol === 'TMPV.BO') {
+            formattedName = 'Tata Motors Passenger Vehicles Ltd';
+          } else if (rawSymbol === 'TMCV.NS' || rawSymbol === 'TMCV.BO') {
+            formattedName = 'Tata Motors Commercial Vehicles Ltd';
+          }
+
+          const stockItem: StockItem = {
+            id: `stock_live_${rawSymbol.replace(/[^A-Za-z0-9_]/g, '_')}`,
+            symbol: displaySymbol,
+            name: formattedName,
+            exchange: isBse ? 'BSE' : isNse ? 'NSE' : isUS ? 'NYSE/NASDAQ' : 'Global',
+            sector: meta.instrumentType === 'ETF' ? 'ETF' : 'Live Market',
+            currentPrice: round(livePrice, 2),
+            openPrice: round(prevClose, 2),
+            dayHigh: round(toFiniteNumber(meta.regularMarketDayHigh, livePrice), 2),
+            dayLow: round(toFiniteNumber(meta.regularMarketDayLow, livePrice), 2),
+            previousClose: round(prevClose, 2),
+            change,
+            changePercent,
+            volume: toFiniteNumber(meta.regularMarketVolume, 500000),
+            fiftyTwoWeekHigh: round(
+              toFiniteNumber(meta.fiftyTwoWeekHigh, livePrice * 1.25),
+              2
+            ),
+            fiftyTwoWeekLow: round(
+              toFiniteNumber(meta.fiftyTwoWeekLow, livePrice * 0.75),
+              2
+            ),
+            risk: 'Moderate',
+            description: `${formattedName} (${rawSymbol}) traded on ${
+              meta.fullExchangeName || 'Exchange'
+            }. Real-time authentic market quotes fetched live from Yahoo Finance.`,
+            marketCap: 'Live Market Instrument',
+            peRatio: 22.5,
+            eps: round(livePrice / 25, 2),
+            roe: 16.0,
+            debtToEquity: 0.4,
+            dividendYield: 1.0,
+            dataFreshness: 'LIVE',
+            lastTradedTime: new Date().toISOString(),
+            sparkline:
+              candles.length >= 7 ? candles.slice(-7).map((c) => c.close) : [livePrice],
+            historical1D: candles.length > 0 ? candles.map((c) => c.close) : [livePrice],
+            historical1W: [livePrice],
+            historical1M: [livePrice],
+            historical1Y: [livePrice],
+          };
+
+          return { stock: stockItem, rawSymbol, isNse, isBse };
+        }
+      } catch {
+        return null;
+      }
+      return null;
+    });
+
+    const resolvedQuotes = (await Promise.all(quotePromises)).filter(Boolean) as Array<{
+      stock: StockItem;
+      rawSymbol: string;
+      isNse: boolean;
+      isBse: boolean;
+    }>;
+
+    // Deduplicate by clean symbol, preferring NSE over BSE, and Indian over Foreign
+    const seenMap = new Map<string, (typeof resolvedQuotes)[0]>();
+    resolvedQuotes.forEach((item) => {
+      const key = item.stock.symbol.toUpperCase();
+      const existing = seenMap.get(key);
+      if (!existing) {
+        seenMap.set(key, item);
+      } else if (item.isNse && !existing.isNse) {
+        seenMap.set(key, item);
+      }
+    });
+
+    const uniqueItems = Array.from(seenMap.values())
+      .sort((a, b) => {
+        // Indian equities first
+        const aScore = a.isNse ? 3 : a.isBse ? 2 : 1;
+        const bScore = b.isNse ? 3 : b.isBse ? 2 : 1;
+        return bScore - aScore;
+      })
+      .map((x) => x.stock);
+
+    const normalized = normalizeStockList(uniqueItems);
+    this.searchCache.set(cacheKey, { results: normalized, timestamp: Date.now() });
+    return normalized;
   }
 
   async getHistoricalCandles(symbol: string, timeframe: string): Promise<HistoricalCandle[]> {

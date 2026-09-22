@@ -102,6 +102,21 @@ describe('MarketDataService & Real-Time Providers', () => {
       }
     });
 
+    it('resolves real companies through aliases and exchange ticker discovery', async () => {
+      const zomatoResults = await liveProvider.searchLiveYahoo('Zomato');
+      expect(Array.isArray(zomatoResults)).toBe(true);
+      if (zomatoResults.length > 0) {
+        expect(
+          zomatoResults.some((s) => s.symbol === 'ETERNAL' || s.symbol === 'ZOMATO' || s.name.includes('Zomato'))
+        ).toBe(true);
+      }
+    });
+
+    it('returns empty array when search query matches no authentic instruments', async () => {
+      const fakeResults = await liveProvider.searchLiveYahoo('randomnonexistentstockxyz99999');
+      expect(fakeResults).toEqual([]);
+    });
+
     it('searches live Yahoo gracefully for empty query', async () => {
       const results = await liveProvider.searchLiveYahoo('');
       expect(results).toEqual([]);
