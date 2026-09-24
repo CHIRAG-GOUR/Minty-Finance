@@ -659,10 +659,16 @@ async function topHeadlineFor(stock: StockItem): Promise<NewsRow | null> {
     const pubDate = (/<pubDate>([\s\S]*?)<\/pubDate>/.exec(block) ?? [])[1] ?? '';
     const source = (/<source[^>]*>([\s\S]*?)<\/source>/.exec(block) ?? [])[1] ?? '';
 
-    const title = decodeEntities(rawTitle)
-      // Google appends " - Publisher"; the publisher is shown separately.
-      .replace(/\s+-\s+[^-]{2,40}$/, '')
-      .trim();
+    const publisher = decodeEntities(source);
+    let title = decodeEntities(rawTitle);
+    // Google appends " - Publisher" to every headline and the publisher is
+    // shown on its own line. Strip it by name, since publisher names can
+    // themselves contain hyphens ("ad-hoc-news.de").
+    if (publisher && title.endsWith(` - ${publisher}`)) {
+      title = title.slice(0, -(publisher.length + 3)).trim();
+    } else {
+      title = title.replace(/\s+-\s+[^-]{2,40}$/, '').trim();
+    }
 
     if (title === '') {
       newsCache.set(key, { value: null, at: Date.now() });
@@ -672,7 +678,7 @@ async function topHeadlineFor(stock: StockItem): Promise<NewsRow | null> {
     const row: NewsRow = {
       id: `${key}-${pubDate}`,
       headline: title,
-      source: decodeEntities(source) || 'News',
+      source: publisher || 'News',
       publishedAt: pubDate.trim(),
       url: decodeEntities(link),
       stock,
