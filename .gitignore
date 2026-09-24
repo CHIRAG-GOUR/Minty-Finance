@@ -55,3 +55,4 @@ screen_*.png
 # Real Firebase credentials — the repo ships a placeholder only.
 /google-services.json
 /GoogleService-Info.plist
+android/app/google-services.json
