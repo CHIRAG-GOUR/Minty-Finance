@@ -138,7 +138,7 @@ const MainNavigator: React.FC = () => {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={THEME.colors.primary} />
-        <Text style={styles.loadingText}>Loading your simulation...</Text>
+        <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
   }

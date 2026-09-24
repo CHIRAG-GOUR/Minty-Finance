@@ -268,7 +268,7 @@ export const ProfileScreen: React.FC = () => {
               { name: 'Gamification & Design Systems', role: 'Interactive Visuals, XP Progression & Badges Engine', icon: 'award' },
               { name: 'Financial Mathematics Core', role: 'NSE/BSE Equities, Mutual Funds, SIP & Compound Math', icon: 'invest' },
               { name: 'Financial Literacy & Curriculum', role: 'Curated Lessons, Interactive Quizzes & Budget Rule Modules', icon: 'growth' },
-              { name: 'Classroom Venture Studio', role: 'Shark Tank Deal Simulation & Valuation Mechanics', icon: 'rocket' },
+              { name: 'Classroom Venture Studio', role: 'Shark Tank Deals & Valuation Mechanics', icon: 'rocket' },
             ].map((member, idx) => (
               <View key={idx} style={styles.memberCard}>
                 <View style={styles.memberIcon}>

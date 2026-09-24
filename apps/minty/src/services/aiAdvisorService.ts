@@ -25,7 +25,7 @@ export const AIAdvisorService = {
     let advice = '';
     const suggestedPrompts: string[] = [
       'What does P/E ratio mean for stock valuation?',
-      'Why did my simulated portfolio move today?',
+      'Why did my portfolio move today?',
       'How does diversification reduce investment risk?',
     ];
 
@@ -93,7 +93,7 @@ export const AIAdvisorService = {
     if (lower.includes('why did my portfolio') || lower.includes('portfolio fall') || lower.includes('market move')) {
       return {
         message:
-          '[Observed Market Dynamics & Education]\n\nYour simulated portfolio valuation updates dynamically in real-time as live market quotes on the National Stock Exchange (NSE) fluctuate throughout the 09:15 - 15:30 IST session.\n\nStock prices change daily based on corporate earnings announcements, macroeconomic data, interest rate shifts, and supply/demand. Short-term price swings are normal; holding quality, profitable businesses across diverse sectors helps compound wealth over 5+ years.',
+          '[Observed Market Dynamics & Education]\n\nYour portfolio valuation updates dynamically in real-time as live market quotes on the National Stock Exchange (NSE) fluctuate throughout the 09:15 - 15:30 IST session.\n\nStock prices change daily based on corporate earnings announcements, macroeconomic data, interest rate shifts, and supply/demand. Short-term price swings are normal; holding quality, profitable businesses across diverse sectors helps compound wealth over 5+ years.',
         suggestedPrompts: [
           'What is diversification?',
           'How do mutual funds reduce volatility?',
@@ -123,13 +123,13 @@ export const AIAdvisorService = {
         message:
           '[Core Concept: Compound Growth]\n\nCompound interest means you earn returns not only on your initial principal, but also on all past accumulated profits. Albert Einstein called compounding the 8th wonder of the world.\n\nShortcut: The Rule of 72 tells you how fast your money doubles (72 ÷ Annual Return % = Years to Double). At 12% p.a., your money doubles in 6 years!',
         suggestedPrompts: [
-          'Open the Compound Simulator',
+          'Open the Compound Calculator',
           'What is the difference between stocks and mutual funds?',
           'What is P/E ratio?',
         ],
         actionRecommendation: {
           type: 'start_sip',
-          label: 'Open Growth Simulator',
+          label: 'Open Growth Calculator',
         },
       };
     }
@@ -137,9 +137,9 @@ export const AIAdvisorService = {
     if (lower.includes('stock') || lower.includes('share') || lower.includes('equity') || lower.includes('nifty')) {
       return {
         message:
-          '[Educational Market Concept: Stocks & Equities]\n\nA stock represents real fractional ownership in a listed corporation (e.g. Reliance, TCS, HDFC Bank). When the company generates profits and expands, the share price tends to appreciate and companies may distribute cash dividends to shareholders.\n\nMinty Finance allows you to practice whole-share simulated orders using live NSE market data without risking real money.',
+          '[Educational Market Concept: Stocks & Equities]\n\nA stock represents real fractional ownership in a listed corporation (e.g. Reliance, TCS, HDFC Bank). When the company generates profits and expands, the share price tends to appreciate and companies may distribute cash dividends to shareholders.\n\nMinty Finance lets you place whole-share orders using live NSE market data.',
         suggestedPrompts: [
-          'How do I calculate simulated charges?',
+          'How are charges calculated?',
           'What is the Pre-Investment Checklist?',
           'Explain P/E ratio',
         ],

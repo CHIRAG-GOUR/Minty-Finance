@@ -329,7 +329,7 @@ export const HomeScreen: React.FC = () => {
               </Text>
             </View>
             <View style={styles.compoundCardBtn}>
-              <Text style={styles.compoundCardBtnText}>Simulate →</Text>
+              <Text style={styles.compoundCardBtnText}>Project →</Text>
             </View>
           </TouchableOpacity>
         </View>

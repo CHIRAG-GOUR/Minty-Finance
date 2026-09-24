@@ -3734,7 +3734,7 @@ export const MOCK_SHARK_TANK_STARTUPS: SharkTankStartup[] = [
     valuation: 320000,
     monthlyRevenue: 64000,
     growthRate: 50,
-    pitchStory: 'Active users accumulated an average of ₹1,850 in virtual index fund savings in their first 60 days without feeling any budget pinch!',
+    pitchStory: 'Active users accumulated an average of ₹1,850 in index fund savings in their first 60 days without feeling any budget pinch!',
     educationalTakeaway: 'Micro-investing removes psychological friction by turning invisible spare change into compounding assets.',
   },
   {
@@ -3776,7 +3776,7 @@ export const MOCK_SHARK_TANK_STARTUPS: SharkTankStartup[] = [
     valuation: 200000,
     monthlyRevenue: 40000,
     growthRate: 36,
-    pitchStory: 'Adopted in 6 residential campus dorms settling over ₹4.2 Lakhs in virtual shared expenses with zero disputes.',
+    pitchStory: 'Adopted in 6 residential campus dorms settling over ₹4.2 Lakhs in shared expenses with zero disputes.',
     educationalTakeaway: 'Solving social friction in group transactions drives high organic word-of-mouth user acquisition.',
   },
 
@@ -4236,7 +4236,7 @@ export const MOCK_LESSONS: LessonModule[] = [
       },
       {
         heading: 'The Famous 50/30/20 Framework',
-        body: 'Divide your income into 3 buckets: 50% for Essentials/Needs (food, transport, school supplies), 30% for Lifestyle/Wants (movies, gaming, snacks), and 20% dedicated to Future Savings & Virtual Investments.',
+        body: 'Divide your income into 3 buckets: 50% for Essentials/Needs (food, transport, school supplies), 30% for Lifestyle/Wants (movies, gaming, snacks), and 20% dedicated to Future Savings & Investments.',
         keyTakeaway: 'The 50/30/20 rule gives you permission to spend guilt-free while guaranteeing wealth growth.',
       },
     ],
@@ -4503,21 +4503,21 @@ export const MOCK_LESSONS: LessonModule[] = [
 ];
 
 export const MOCK_BADGES: Badge[] = [
-  { id: 'b1', title: 'First Trade', description: 'Executed your first simulated virtual stock purchase', iconName: 'trending-up', category: 'investing', isUnlocked: false, progress: 0, maxProgress: 1, xpValue: 100 },
+  { id: 'b1', title: 'First Trade', description: 'Executed your first stock purchase', iconName: 'trending-up', category: 'investing', isUnlocked: false, progress: 0, maxProgress: 1, xpValue: 100 },
   { id: 'b2', title: 'Savvy Saver', description: 'Maintained a 20%+ savings rate in the Wealth Lab', iconName: 'piggy-bank', category: 'saving', isUnlocked: false, progress: 0, maxProgress: 1, xpValue: 100 },
   { id: 'b3', title: 'Knowledge Hunter', description: 'Completed 3 full financial literacy lesson modules', iconName: 'book-open', category: 'learning', isUnlocked: false, progress: 0, maxProgress: 3, xpValue: 150 },
   { id: 'b4', title: 'Diversified Titan', description: 'Invested in at least 3 distinct stocks and 1 mutual fund', iconName: 'pie-chart', category: 'investing', isUnlocked: false, progress: 0, maxProgress: 4, xpValue: 200 },
-  { id: 'b5', title: 'Compound Wizard', description: 'Simulated 10-year wealth projections in the Compound Calculator', iconName: 'activity', category: 'investing', isUnlocked: false, progress: 0, maxProgress: 1, xpValue: 75 },
+  { id: 'b5', title: 'Compound Wizard', description: 'Projected 10-year wealth in the Compound Calculator', iconName: 'activity', category: 'investing', isUnlocked: false, progress: 0, maxProgress: 1, xpValue: 75 },
   { id: 'b6', title: 'Shark Investor', description: 'Backed a student venture in the Shark Tank Pitch Arena', iconName: 'award', category: 'shark_tank', isUnlocked: false, progress: 0, maxProgress: 1, xpValue: 150 },
   { id: 'b7', title: 'Iron Streak', description: 'Maintained a 7-day daily financial learning streak', iconName: 'flame', category: 'streak', isUnlocked: false, progress: 1, maxProgress: 7, xpValue: 250 },
-  { id: 'b8', title: 'FD Locksmith', description: 'Opened a virtual Fixed Deposit to lock in guaranteed interest', iconName: 'shield', category: 'saving', isUnlocked: false, progress: 0, maxProgress: 1, xpValue: 100 },
+  { id: 'b8', title: 'FD Locksmith', description: 'Opened a Fixed Deposit to lock in guaranteed interest', iconName: 'shield', category: 'saving', isUnlocked: false, progress: 0, maxProgress: 1, xpValue: 100 },
 ];
 
 export const MOCK_CHALLENGES: Challenge[] = [
-  { id: 'ch-1', title: 'Build a Balanced Portfolio', description: 'Simulate virtual investments in 2 different stocks from separate sectors.', category: 'daily', xpReward: 100, progress: 0, target: 2, unit: 'Stocks', isCompleted: false, isClaimed: false, expiresAt: '24h' },
+  { id: 'ch-1', title: 'Build a Balanced Portfolio', description: 'Invest in 2 different stocks from separate sectors.', category: 'daily', xpReward: 100, progress: 0, target: 2, unit: 'Stocks', isCompleted: false, isClaimed: false, expiresAt: '24h' },
   { id: 'ch-2', title: 'Complete Saving Lesson', description: 'Read "Saving Fundamentals" and score 100% on the mastery quiz.', category: 'daily', xpReward: 75, progress: 0, target: 1, unit: 'Lesson', isCompleted: false, isClaimed: false, expiresAt: '24h' },
   { id: 'ch-3', title: 'Adjust 50/30/20 Budget', description: 'Configure your monthly budget in the Wealth Lab to achieve a 20% savings rate.', category: 'weekly', xpReward: 120, progress: 0, target: 1, unit: 'Budget', isCompleted: false, isClaimed: false, expiresAt: '5d' },
-  { id: 'ch-4', title: 'Shark Tank Deal Maker', description: 'Evaluate student pitches and make your first virtual startup investment.', category: 'weekly', xpReward: 150, progress: 0, target: 1, unit: 'Deal', isCompleted: false, isClaimed: false, expiresAt: '5d' },
+  { id: 'ch-4', title: 'Shark Tank Deal Maker', description: 'Evaluate pitches and make your first startup investment.', category: 'weekly', xpReward: 150, progress: 0, target: 1, unit: 'Deal', isCompleted: false, isClaimed: false, expiresAt: '5d' },
 ];
 
 // Generic leaderboard handles — zero personal names
@@ -4566,5 +4566,5 @@ export const PRE_INVESTMENT_CHECKLIST_ITEMS = [
   { id: 'chk_1', title: 'Business Moat & Sector', description: 'Do you understand what products the company makes and why customers choose them?' },
   { id: 'chk_2', title: 'Valuation vs Peers', description: 'Is the P/E ratio reasonable compared to industry benchmarks and historical growth?' },
   { id: 'chk_3', title: 'Debt Safety Net', description: 'Does the company have manageable debt levels with adequate cash flows?' },
-  { id: 'chk_4', title: 'Portfolio Diversification', description: 'Ensure no single stock exceeds 20% of your total virtual portfolio capital.' },
+  { id: 'chk_4', title: 'Portfolio Diversification', description: 'Ensure no single stock exceeds 20% of your total portfolio capital.' },
 ];

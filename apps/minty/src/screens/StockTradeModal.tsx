@@ -299,7 +299,7 @@ const StockTradeModalBody: React.FC<StockTradeModalProps> = ({ visible, data, on
     } catch (err) {
       showToast(
         'Order Failed',
-        err instanceof Error ? err.message : 'The simulated order could not be completed.',
+        err instanceof Error ? err.message : 'The order could not be completed.',
         'warning'
       );
     } finally {
