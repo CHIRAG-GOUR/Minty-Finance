@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  UserProfile,
   VirtualWallet,
   StockHolding,
   MutualFundHolding,
@@ -19,20 +18,47 @@ import {
   MOCK_CHALLENGES,
 } from '../constants/mockData';
 
-const STORAGE_KEYS = {
-  PROFILE: '@minti_user_profile',
-  WALLET: '@minti_virtual_wallet',
-  STOCKS: '@minti_stock_holdings',
-  FUNDS: '@minti_fund_holdings',
-  FDS: '@minti_fd_holdings',
-  TRANSACTIONS: '@minti_transactions',
-  BUDGET: '@minti_budget_state',
-  LESSONS: '@minti_lessons_progress',
-  BADGES: '@minti_badges',
-  CHALLENGES: '@minti_challenges',
-  SETTINGS: '@minti_settings',
-  WATCHLIST: '@minti_watchlist',
-};
+const BASE_KEYS = {
+  PROFILE: 'user_profile',
+  WALLET: 'virtual_wallet',
+  STOCKS: 'stock_holdings',
+  FUNDS: 'fund_holdings',
+  FDS: 'fd_holdings',
+  TRANSACTIONS: 'transactions',
+  BUDGET: 'budget_state',
+  LESSONS: 'lessons_progress',
+  BADGES: 'badges',
+  CHALLENGES: 'challenges',
+  SETTINGS: 'settings',
+  WATCHLIST: 'watchlist',
+} as const;
+
+/**
+ * Every key is namespaced by Firebase UID, so a portfolio belongs to an
+ * account rather than to the device. Two users sharing a phone keep separate
+ * holdings, and renaming yourself cannot move your positions.
+ *
+ * Null scope (signed out) falls back to a parking namespace that the app never
+ * shows; it exists only so a stray write before sign-in cannot land in, or
+ * overwrite, a real user's data.
+ */
+let activeScope: string | null = null;
+
+export function setStorageScope(uid: string | null): void {
+  activeScope = uid && uid.trim() !== '' ? uid.trim() : null;
+}
+
+export function getStorageScope(): string | null {
+  return activeScope;
+}
+
+function scopedKey(base: string): string {
+  return `@minty_u_${activeScope ?? 'anonymous'}_${base}`;
+}
+
+const STORAGE_KEYS = new Proxy({} as Record<keyof typeof BASE_KEYS, string>, {
+  get: (_target, prop: string) => scopedKey(BASE_KEYS[prop as keyof typeof BASE_KEYS] ?? prop),
+});
 
 export interface AppSettings {
   hapticsEnabled: boolean;
@@ -40,43 +66,9 @@ export interface AppSettings {
   notificationsEnabled: boolean;
 }
 
+// The user profile itself lives in Firestore under users/{uid} and is handled
+// by UserProfileService. Only simulation data is kept here.
 export const StorageService = {
-  async getUserProfile(): Promise<UserProfile | null> {
-    try {
-      const data = await AsyncStorage.getItem(STORAGE_KEYS.PROFILE);
-      if (!data) return null;
-      const parsed: UserProfile = JSON.parse(data);
-      if (
-        parsed.name.includes('Shaurya') ||
-        parsed.name.includes('Prashant') ||
-        parsed.name.includes('Neha') ||
-        parsed.name.includes('Lavanya') ||
-        parsed.name.includes('Abhyudh') ||
-        parsed.name.includes('Abhimannyu') ||
-        parsed.name.includes('Anujeet')
-      ) {
-        parsed.name =
-          parsed.role === 'super_admin'
-            ? 'Chirag (Super Admin)'
-            : parsed.role === 'teacher'
-            ? 'Faculty Mentor'
-            : 'Student Investor';
-      }
-      return parsed;
-    } catch (e) {
-      console.error('Failed to get user profile', e);
-      return null;
-    }
-  },
-
-  async saveUserProfile(profile: UserProfile): Promise<void> {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(profile));
-    } catch (e) {
-      console.error('Failed to save user profile', e);
-    }
-  },
-
   async getWallet(): Promise<VirtualWallet> {
     try {
       const data = await AsyncStorage.getItem(STORAGE_KEYS.WALLET);
@@ -281,9 +273,11 @@ export const StorageService = {
     }
   },
 
+  /** Clears this user's simulation data. Never touches another UID's namespace. */
   async resetAllData(): Promise<void> {
     try {
-      await AsyncStorage.multiRemove(Object.values(STORAGE_KEYS));
+      const keys = Object.keys(BASE_KEYS).map((k) => scopedKey(BASE_KEYS[k as keyof typeof BASE_KEYS]));
+      await AsyncStorage.multiRemove(keys);
     } catch (e) {
       console.error('Failed to reset all data', e);
     }

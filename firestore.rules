@@ -1,0 +1,54 @@
+rules_version = '2';
+
+// Minty Finance — Firestore security rules.
+//
+// The only authorization boundary is the authenticated Firebase UID. There are
+// no roles, no custom claims and no admin bypass: a signed-in user can read and
+// write exactly one document, their own. Removing the old RBAC model from the
+// client would mean nothing if the rules still trusted a "role" field, so none
+// of these rules reference one.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Fields the client is allowed to set, and their expected types.
+    function hasValidShape() {
+      return request.resource.data.keys().hasOnly([
+               'uid', 'phoneNumber', 'displayName',
+               'createdAt', 'updatedAt', 'lastLoginAt',
+               'level', 'levelTitle', 'currentXP', 'nextLevelXP',
+               'streakDays', 'lastActiveDate', 'email'
+             ])
+             && (!('displayName' in request.resource.data)
+                 || (request.resource.data.displayName is string
+                     && request.resource.data.displayName.size() > 0
+                     && request.resource.data.displayName.size() <= 40));
+    }
+
+    // A client must never be able to move a document to a different owner.
+    function uidFieldMatches(uid) {
+      return !('uid' in request.resource.data) || request.resource.data.uid == uid;
+    }
+
+    match /users/{uid} {
+      allow get, list: if isOwner(uid);
+      allow create: if isOwner(uid) && hasValidShape() && uidFieldMatches(uid);
+      allow update: if isOwner(uid) && hasValidShape() && uidFieldMatches(uid);
+      // Profiles are retained on sign-out so a returning user keeps their
+      // identity and progress. Deletion is an out-of-band operation.
+      allow delete: if false;
+    }
+
+    // Anything not matched above is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -13,6 +13,7 @@ import { Icon } from '../constants/icons';
 import { PrimaryButton } from '../components/common/PrimaryButton';
 import { formatXP, formatPercentage, formatCurrency } from '../utils/formatters';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 
 export const ProfileScreen: React.FC = () => {
   const {
@@ -25,11 +26,30 @@ export const ProfileScreen: React.FC = () => {
     resetSimulationData,
     openModal,
   } = useApp();
+  const { profile, phoneNumber, signOut } = useAuth();
 
   const [activeSubTab, setActiveSubTab] = useState<'profile' | 'leaderboard' | 'trust' | 'credits'>('profile');
 
   const unlockedCount = badges.filter((b) => b.isUnlocked).length;
   const completedLessons = lessons.filter((l) => l.isCompleted).length;
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Log out',
+      'You can sign back in with the same phone number. Your portfolio and progress stay on your account.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log out',
+          style: 'destructive',
+          onPress: () => {
+            // Firebase clears the session; nothing belonging to this UID is deleted.
+            signOut().catch(() => {});
+          },
+        },
+      ]
+    );
+  };
 
   const handleReset = () => {
     Alert.alert(
@@ -93,8 +113,8 @@ export const ProfileScreen: React.FC = () => {
                   <Icon name="user" size={32} color={THEME.colors.accentYellow} />
                 </View>
                 <View style={styles.profileMeta}>
-                  <Text style={styles.profileName}>{userProfile.name}</Text>
-                  <Text style={styles.gradeText}>Grade 9 · Investor Academy</Text>
+                  <Text style={styles.profileName}>{userProfile.displayName}</Text>
+                  <Text style={styles.gradeText} numberOfLines={1}>{profile?.email || phoneNumber || 'Virtual investor'}</Text>
                   <View style={styles.levelTag}>
                     <Icon name="award" size={12} color={THEME.colors.obsidian} />
                     <Text style={styles.levelTagText}>
@@ -171,6 +191,22 @@ export const ProfileScreen: React.FC = () => {
                 iconName="refresh"
                 variant="danger"
                 onPress={handleReset}
+                size="md"
+              />
+            </View>
+
+            {/* Account */}
+            <View style={styles.sectionCard}>
+              <Text style={styles.cardTitle}>Account</Text>
+              <Text style={styles.resetDesc}>
+                Signed in as {profile?.displayName ?? 'Investor'}
+                {phoneNumber ? ` · ${phoneNumber}` : ''}
+              </Text>
+              <PrimaryButton
+                title="Log out"
+                iconName="user"
+                variant="secondary"
+                onPress={handleLogout}
                 size="md"
               />
             </View>

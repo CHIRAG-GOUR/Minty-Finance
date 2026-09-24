@@ -8,25 +8,18 @@ import { FloatingTabBar } from './src/components/navigation/FloatingTabBar';
 import { ToastNotification } from './src/components/common/ToastNotification';
 import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import { SplashScreen } from './src/components/common/SplashScreen';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { AuthGate } from './src/screens/auth/AuthGate';
 
 // Screens
-import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { InvestScreen } from './src/screens/InvestScreen';
-import { BudgetScreen } from './src/screens/BudgetScreen';
 import { SharkTankScreen } from './src/screens/SharkTankScreen';
-import { ClassroomScreen } from './src/screens/ClassroomScreen';
-import { AdminControlScreen } from './src/screens/AdminControlScreen';
 import { PortfolioScreen } from './src/screens/PortfolioScreen';
-import { LearnScreen } from './src/screens/LearnScreen';
 import { RewardsScreen } from './src/screens/RewardsScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 
 // Modals
-import { RoleSelectorModal } from './src/screens/RoleSelectorModal';
-import { QuickTerminalModal } from './src/screens/QuickTerminalModal';
-import { AddStockModal } from './src/screens/AddStockModal';
-import { CreateChallengeModal } from './src/screens/CreateChallengeModal';
 import { SharkTankModal } from './src/screens/SharkTankModal';
 import { LessonDetailModal } from './src/screens/LessonDetailModal';
 import { AIAdvisorModal } from './src/screens/AIAdvisorModal';
@@ -81,14 +74,6 @@ const ActiveModal: React.FC = () => {
   if (!activeModal) return null;
 
   switch (activeModal) {
-    case 'role_selector':
-      return <RoleSelectorModal visible onClose={closeModal} />;
-    case 'quick_action_terminal':
-      return <QuickTerminalModal visible onClose={closeModal} />;
-    case 'add_stock_modal':
-      return <AddStockModal visible onClose={closeModal} />;
-    case 'create_challenge':
-      return <CreateChallengeModal />;
     case 'shark_tank':
     case 'shark_tank_pitch':
       return (
@@ -120,10 +105,7 @@ const ActiveModal: React.FC = () => {
 };
 
 const MainNavigator: React.FC = () => {
-  const { isLoading, userProfile, activeTab, toast, closeModal, activeModal, setActiveTab } =
-    useApp();
-
-  const [isSplashComplete, setIsSplashComplete] = React.useState(false);
+  const { isLoading, activeTab, toast, closeModal, activeModal, setActiveTab } = useApp();
 
   const screenLabel = useMemo(
     () => SCREEN_LABELS[activeTab] ?? 'This screen',
@@ -152,24 +134,12 @@ const MainNavigator: React.FC = () => {
     return () => sub.remove();
   }, [activeModal, activeTab, closeModal, setActiveTab]);
 
-  if (isLoading || !isSplashComplete) {
+  if (isLoading) {
     return (
-      <SplashScreen
-        isLoaded={!isLoading}
-        onFinish={() => setIsSplashComplete(true)}
-      />
-    );
-  }
-
-  if (!userProfile.isOnboarded) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
-        <StatusBar barStyle="dark-content" backgroundColor={THEME.colors.background} />
-        <ErrorBoundary section="Onboarding">
-          <OnboardingScreen />
-        </ErrorBoundary>
-        <ToastNotification toast={toast} />
-      </SafeAreaView>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={THEME.colors.primary} />
+        <Text style={styles.loadingText}>Loading your simulation...</Text>
+      </View>
     );
   }
 
@@ -204,14 +174,50 @@ const MainNavigator: React.FC = () => {
   );
 };
 
+/**
+ * Decides between the authentication flow and the app itself.
+ *
+ * `status` comes straight from Firebase, so the simulation is unreachable until
+ * a phone number has actually been verified and a profile exists. AppProvider
+ * is mounted only inside the authenticated branch, which is what keeps every
+ * wallet, holding and transaction scoped to one UID.
+ */
+const Root: React.FC = () => {
+  const { status } = useAuth();
+  const [splashDone, setSplashDone] = React.useState(false);
+
+  if (status === 'initializing' || !splashDone) {
+    return (
+      <SplashScreen
+        isLoaded={status !== 'initializing'}
+        onFinish={() => setSplashDone(true)}
+      />
+    );
+  }
+
+  if (status !== 'authenticated') {
+    return (
+      <ErrorBoundary section="Sign in">
+        <AuthGate />
+      </ErrorBoundary>
+    );
+  }
+
+  return (
+    <AppProvider>
+      <MainNavigator />
+    </AppProvider>
+  );
+};
+
 export default function App() {
   return (
     <SafeAreaProvider>
       {/* Last line of defence: a fault above this point would close the app. */}
-      <ErrorBoundary section="Minti Finance">
-        <AppProvider>
-          <MainNavigator />
-        </AppProvider>
+      <ErrorBoundary section="Minty Finance">
+        <AuthProvider>
+          <Root />
+        </AuthProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
   );

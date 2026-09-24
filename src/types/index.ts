@@ -1,17 +1,10 @@
-export type UserRole = 'super_admin' | 'teacher' | 'student';
-
 export type TabType =
   | 'home'
-  | 'markets'
-  | 'wealth_lab'
-  | 'shark_tank'
-  | 'classroom'
-  | 'admin_control'
-  | 'profile'
-  | 'learn'
   | 'invest'
-  | 'budget'
+  | 'markets'
+  | 'shark_tank'
   | 'portfolio'
+  | 'profile'
   | 'rewards';
 
 export type RiskLevel = 'Low' | 'Moderate' | 'High';
@@ -39,22 +32,29 @@ export interface MarketStatusInfo {
   nextSessionTime: string;
 }
 
+/**
+ * The one account model. Identity is the Firebase UID and nothing else — not
+ * the phone number, not the display name, and there are no roles or
+ * permissions. Renaming yourself must never produce a different account.
+ */
 export interface UserProfile {
-  id: string;
+  /** Firebase Authentication UID. The authoritative identity everywhere. */
+  uid: string;
+  phoneNumber: string;
+  displayName: string;
+  /** Contact email captured at sign-up. Sign-in is always phone + OTP. */
   email: string;
-  name: string;
-  role: UserRole;
-  avatarId: string;
-  schoolName: string;
-  cohortClass?: string; // e.g. "Grade 9A"
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt: string;
+
+  // Progress the simulation keeps against this UID.
   level: number;
   levelTitle: string;
   currentXP: number;
   nextLevelXP: number;
   streakDays: number;
   lastActiveDate: string;
-  isOnboarded: boolean;
-  createdAt: string;
 }
 
 export interface VirtualWallet {
@@ -259,7 +259,7 @@ export interface SharkTankStartup {
   growthRate: number;
   pitchStory: string;
   educationalTakeaway: string;
-  isApprovedByTeacher: boolean;
+  isVerifiedPitch: boolean;
   totalRaisedVirtual: number;
   investorCount: number;
 }

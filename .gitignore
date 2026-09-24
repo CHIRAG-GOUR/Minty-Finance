@@ -51,3 +51,7 @@ ios/Pods/
 *.aab
 screen_*.png
 *.ps1
+
+# Real Firebase credentials — the repo ships a placeholder only.
+/google-services.json
+/GoogleService-Info.plist

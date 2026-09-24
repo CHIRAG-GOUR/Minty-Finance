@@ -30,13 +30,13 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
       onActionPress();
     } else {
       if (challenge.id.includes('daily-1')) {
-        setActiveTab('learn');
+        setActiveTab('home');
       } else if (challenge.id.includes('daily-2')) {
         setActiveTab('portfolio');
       } else if (challenge.id.includes('weekly-1')) {
         setActiveTab('invest');
       } else if (challenge.id.includes('weekly-2')) {
-        setActiveTab('budget');
+        setActiveTab('portfolio');
       } else {
         setActiveTab('invest');
       }

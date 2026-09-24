@@ -114,7 +114,7 @@ export const SharkTankScreen: React.FC = () => {
                       <View style={styles.industryTag}>
                         <Text style={styles.industryTagText}>{startup.industry}</Text>
                       </View>
-                      {startup.isApprovedByTeacher && (
+                      {startup.isVerifiedPitch && (
                         <View style={styles.verifiedTag}>
                           <Icon name="check" size={10} color={THEME.colors.obsidian} />
                           <Text style={styles.verifiedTagText}>Teacher Approved</Text>

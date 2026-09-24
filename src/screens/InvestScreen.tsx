@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -7,33 +7,91 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { THEME } from '../constants/theme';
 import { Icon } from '../constants/icons';
 import { StockCard } from '../components/cards/StockCard';
-import { formatCurrency } from '../utils/formatters';
+import { StockLineChart } from '../components/charts/StockLineChart';
 import { useApp } from '../context/AppContext';
 import { StockItem } from '../types';
 import { MarketDataService } from '../services/marketDataService';
+import {
+  MarketSections,
+  TRADING_SCREENS,
+  ScreenId,
+  CapSegment,
+  invalidateMarketCache,
+  getQuotes,
+} from '../services/marketSections';
+import { useMarketSection } from '../hooks/useMarketSection';
+import {
+  SectionHeader,
+  SectionStateView,
+  RankedRow,
+  MetricBarRow,
+  RailTile,
+  HeatCell,
+  BreadthPanel,
+  LearnChip,
+  moveColor,
+} from '../components/markets/MarketSectionViews';
+import {
+  formatCompactNumber,
+  formatCurrencyOrDash,
+  formatPercentage,
+  formatTime,
+} from '../utils/formatters';
+import { isIndexSymbol } from '../services/instrumentResolver';
+import { toFiniteNumber, clamp } from '../utils/safeNumber';
 
-type StockFilter = 'all' | 'large_cap' | 'mid_cap' | 'small_cap' | 'gainers' | 'losers' | 'most_active' | 'watchlist';
+type MoverDirection = 'gainers' | 'losers';
+type MoverSegment = CapSegment | 'all';
+
+/** Short explainers, kept to one sentence so Markets does not become a textbook. */
+const EXPLAINERS: Record<string, { title: string; body: string }> = {
+  volume: {
+    title: 'What is volume?',
+    body: 'Volume is how many shares changed hands today. High volume means lots of people agreed to trade at these prices.',
+  },
+  rvol: {
+    title: 'What is relative volume?',
+    body: "Today's volume compared with the same stock's own recent average. 3x means three times its usual activity — something is going on.",
+  },
+  intraday: {
+    title: 'What does intraday mean?',
+    body: "Intraday means within a single trading day. A wide intraday range means the price swung a lot between the day's high and low.",
+  },
+  marketCap: {
+    title: 'What does market cap mean?',
+    body: 'Market cap is the total value of all a company\'s shares. Large caps are usually steadier; small caps can move much faster.',
+  },
+  mtf: {
+    title: 'What is MTF?',
+    body: 'Margin Trading Facility lets investors borrow from a broker to buy more shares than their cash allows. It magnifies both gains and losses.',
+  },
+  etf: {
+    title: 'What is an ETF?',
+    body: 'An ETF is a basket of many shares you can buy in one trade, so your money is spread across lots of companies at once.',
+  },
+};
 
 export const InvestScreen: React.FC = () => {
-  const {
-    wallet,
-    stockCatalog,
-    stockHoldings,
-    marketStatus,
-    watchlist,
-    openModal,
-  } = useApp();
+  const { stockCatalog, stockHoldings, marketStatus, openModal } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState<StockFilter>('all');
   const [liveSearchResults, setLiveSearchResults] = useState<StockItem[]>([]);
   const [isSearchingLive, setIsSearchingLive] = useState(false);
 
-  // Debounced real-time Yahoo Finance live search for any unlisted/global equity
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const [moverDirection, setMoverDirection] = useState<MoverDirection>('gainers');
+  const [moverSegment, setMoverSegment] = useState<MoverSegment>('all');
+  const [activeScreen, setActiveScreen] = useState<ScreenId>('near-52w-high');
+  const [openExplainer, setOpenExplainer] = useState<string | null>(null);
+
+  // --- live search -------------------------------------------------------
   useEffect(() => {
     const trimmed = searchQuery.trim();
     if (trimmed.length < 2) {
@@ -43,508 +101,723 @@ export const InvestScreen: React.FC = () => {
     }
 
     setIsSearchingLive(true);
-    let isCancelled = false;
+    let cancelled = false;
 
     const timer = setTimeout(async () => {
       try {
         const results = await MarketDataService.searchLiveYahoo(trimmed);
-        if (!isCancelled) {
-          setLiveSearchResults(results);
-          setIsSearchingLive(false);
-        }
+        if (!cancelled) setLiveSearchResults(Array.isArray(results) ? results : []);
       } catch {
-        if (!isCancelled) {
-          setIsSearchingLive(false);
-        }
+        if (!cancelled) setLiveSearchResults([]);
+      } finally {
+        if (!cancelled) setIsSearchingLive(false);
       }
     }, 300);
 
     return () => {
-      isCancelled = true;
+      cancelled = true;
       clearTimeout(timer);
     };
   }, [searchQuery]);
 
-  const filterChips: { id: StockFilter; label: string }[] = [
-    { id: 'all', label: 'All Stocks' },
-    { id: 'watchlist', label: 'Watchlist' },
-    { id: 'large_cap', label: 'Large Cap' },
-    { id: 'gainers', label: 'Top Gainers' },
-    { id: 'losers', label: 'Top Losers' },
-    { id: 'most_active', label: 'Most Active' },
-  ];
+  // --- sections ----------------------------------------------------------
+  const movers = useMarketSection(
+    () => MarketSections.getTopMovers(moverDirection, moverSegment),
+    [moverDirection, moverSegment],
+    refreshKey
+  );
+  const shockers = useMarketSection(() => MarketSections.getVolumeShockers(), [], refreshKey);
+  const intraday = useMarketSection(() => MarketSections.getTopIntraday(), [], refreshKey);
+  const sectors = useMarketSection(() => MarketSections.getSectors(), [], refreshKey);
+  const screenResults = useMarketSection(
+    () => MarketSections.runScreen(activeScreen),
+    [activeScreen],
+    refreshKey
+  );
+  const mostBought = useMarketSection(() => MarketSections.getMostBought(), [], refreshKey);
+  const mtf = useMarketSection(() => MarketSections.getMostBoughtMTF(), [], refreshKey);
+  const etfs = useMarketSection(() => MarketSections.getMostBoughtETFs(), [], refreshKey);
+  const news = useMarketSection(() => MarketSections.getStocksInNews(), [], refreshKey);
 
-  const filteredStocks = useMemo(() => {
-    let list = [...stockCatalog];
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    invalidateMarketCache();
+    try {
+      await getQuotes(true);
+    } catch {
+      // Sections surface their own failures; the gesture itself always ends.
+    }
+    setRefreshKey((n) => n + 1);
+    setIsRefreshing(false);
+  }, []);
 
-    // Search query filter
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      list = list.filter(
-        (s) =>
-          s.symbol.toLowerCase().includes(q) ||
-          s.name.toLowerCase().includes(q) ||
-          s.sector.toLowerCase().includes(q)
+  /** Every instrument anywhere in Markets opens this one detail route. */
+  const openDetail = useCallback(
+    (stock: StockItem) => {
+      const holding = stockHoldings.find(
+        (h) => h.symbol?.toUpperCase() === stock.symbol?.toUpperCase()
       );
+      openModal('stock_trade', { stock, action: 'buy', holding });
+    },
+    [openModal, stockHoldings]
+  );
+
+  const indices = useMemo(
+    () => stockCatalog.filter((s) => isIndexSymbol(s.symbol)),
+    [stockCatalog]
+  );
+
+  const breadth = useMemo(() => {
+    const equities = stockCatalog.filter((s) => s && !isIndexSymbol(s.symbol));
+    let advancing = 0;
+    let declining = 0;
+    let unchanged = 0;
+    let totalVolume = 0;
+    for (const s of equities) {
+      const change = toFiniteNumber(s.changePercent, 0);
+      if (change > 0) advancing += 1;
+      else if (change < 0) declining += 1;
+      else unchanged += 1;
+      totalVolume += toFiniteNumber(s.volume, 0);
     }
+    return { advancing, declining, unchanged, totalVolume };
+  }, [stockCatalog]);
 
-    // Category / Market mover filter
-    switch (selectedFilter) {
-      case 'watchlist':
-        list = list.filter((s) => watchlist.includes(s.symbol.toUpperCase()));
-        break;
-      case 'large_cap':
-        list = list.filter((s) => s.risk === 'Low' || s.symbol === 'NIFTY 50' || s.symbol === 'SENSEX');
-        break;
-      case 'gainers':
-        list = list.filter((s) => s.changePercent > 0).sort((a, b) => b.changePercent - a.changePercent);
-        break;
-      case 'losers':
-        list = list.filter((s) => s.changePercent < 0).sort((a, b) => a.changePercent - b.changePercent);
-        break;
-      case 'most_active':
-        list = list.sort((a, b) => (b.volume || 0) - (a.volume || 0));
-        break;
-      default:
-        break;
-    }
+  const lastUpdated = movers.asOf ?? sectors.asOf ?? null;
+  const isSearching = searchQuery.trim().length >= 2;
 
-    return list;
-  }, [stockCatalog, searchQuery, selectedFilter, watchlist]);
+  const searchRows = useMemo(() => {
+    const q = searchQuery.trim().toUpperCase();
+    if (q.length < 2) return [];
+    const local = stockCatalog.filter(
+      (s) =>
+        s.symbol?.toUpperCase().includes(q) ||
+        s.name?.toUpperCase().includes(q) ||
+        s.sector?.toUpperCase().includes(q)
+    );
+    const seen = new Set(local.map((s) => s.symbol?.toUpperCase()));
+    const remote = liveSearchResults.filter((s) => !seen.has(s.symbol?.toUpperCase()));
+    return [...local, ...remote];
+  }, [searchQuery, stockCatalog, liveSearchResults]);
 
-  // Additional live-discovered stocks from Yahoo Finance search not already in filteredStocks
-  const additionalLiveStocks = useMemo(() => {
-    if (!searchQuery.trim() || liveSearchResults.length === 0) return [];
-    const localKeys = new Set(filteredStocks.map((s) => s.symbol.toUpperCase()));
-    return liveSearchResults.filter((s) => !localKeys.has(s.symbol.toUpperCase()));
-  }, [liveSearchResults, filteredStocks, searchQuery]);
+  const explainer = openExplainer ? EXPLAINERS[openExplainer] : null;
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerTitleBlock}>
-          <Text style={styles.title} numberOfLines={1}>
-            Stocks Trading Floor
+        <View style={styles.headerTextCol}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            Markets
           </Text>
-          <Text style={styles.subtitle} numberOfLines={2}>
-            Real Indian market feeds · Virtual ₹1,00,000 practice capital
-          </Text>
+          <View style={styles.statusRow}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: marketStatus.isOpen ? THEME.colors.primary : THEME.colors.textMuted },
+              ]}
+            />
+            <Text style={styles.statusText} numberOfLines={1}>
+              {marketStatus.isOpen ? 'Market open' : 'Market closed'}
+              {lastUpdated ? ` · Updated ${formatTime(new Date(lastUpdated).toISOString())}` : ''}
+            </Text>
+          </View>
         </View>
 
-        <View style={styles.cashBadge}>
-          <Text style={styles.cashBadgeLabel}>Available Cash</Text>
-          <Text style={styles.cashBadgeAmount} numberOfLines={1}>
-            {formatCurrency(wallet.cashBalance)}
-          </Text>
-        </View>
+        <TouchableOpacity
+          onPress={handleRefresh}
+          style={styles.refreshBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Refresh market data"
+        >
+          <Icon name="refresh" size={15} color={THEME.colors.obsidian} />
+        </TouchableOpacity>
       </View>
 
-      {/* Safety Notice & Market Status Banner */}
-      <View style={styles.statusBanner}>
-        <View style={styles.statusBannerLeft}>
-          <View
-            style={[
-              styles.liveIndicatorDot,
-              {
-                backgroundColor: marketStatus.isOpen
-                  ? THEME.colors.accentYellow
-                  : THEME.colors.coral,
-              },
-            ]}
-          />
-          <Text style={styles.statusBannerText}>
-            {marketStatus.isOpen
-              ? 'NSE Live · 09:15 - 15:30 IST'
-              : 'Market Closed'}
-          </Text>
-        </View>
-        <Text style={styles.simulatedTag}>VIRTUAL</Text>
+      {/* Search */}
+      <View style={styles.searchBar}>
+        <Icon name="search" size={16} color={THEME.colors.textMuted} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search stocks, ETFs, symbols"
+          placeholderTextColor={THEME.colors.textMuted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          returnKeyType="search"
+        />
+        {isSearchingLive ? <ActivityIndicator size="small" color={THEME.colors.textMuted} /> : null}
+        {searchQuery.length > 0 ? (
+          <TouchableOpacity
+            onPress={() => setSearchQuery('')}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+          >
+            <Icon name="close" size={15} color={THEME.colors.textMuted} />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <ScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={THEME.colors.primary} />
+        }
       >
-        <View style={styles.sectionContainer}>
-          {/* Search Input */}
-          <View style={styles.searchBarContainer}>
-            <Icon name="search" size={16} color={THEME.colors.textMuted} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search any stock or equity in real-time..."
-              placeholderTextColor={THEME.colors.textMuted}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoCapitalize="none"
+        {isSearching ? (
+          /* --- Search results replace the dashboard while a query is active --- */
+          <View style={styles.block}>
+            <SectionHeader
+              title={`${searchRows.length} result${searchRows.length === 1 ? '' : 's'}`}
+              subtitle={`Matching "${searchQuery.trim()}"`}
             />
-            {isSearchingLive && (
-              <ActivityIndicator size="small" color={THEME.colors.primaryDark} style={{ marginRight: 4 }} />
-            )}
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Icon name="x" size={16} color={THEME.colors.textMuted} />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Filter Chips Horizontal Scroll */}
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterChipsScroll}
-          >
-            {filterChips.map((chip) => {
-              const isSelected = selectedFilter === chip.id;
-              return (
-                <TouchableOpacity
-                  key={chip.id}
-                  activeOpacity={0.8}
-                  onPress={() => setSelectedFilter(chip.id)}
-                  style={[
-                    styles.filterChip,
-                    isSelected && styles.filterChipSelected,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      isSelected && styles.filterChipTextSelected,
-                    ]}
-                  >
-                    {chip.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-
-          {/* Results Count & Data Freshness Tag */}
-          <View style={styles.resultsInfoRow}>
-            <Text style={styles.resultsCountText}>
-              {filteredStocks.length + additionalLiveStocks.length} instruments{' '}
-              {searchQuery.trim().length >= 2 ? `for "${searchQuery}"` : ''}
-            </Text>
-            <View style={styles.liveBadgeRow}>
-              <View style={styles.liveIndicatorDotGreen} />
-              <Text style={styles.freshnessText}>LIVE EXCHANGE FEED</Text>
-            </View>
-          </View>
-
-          {/* Stock Cards List (Catalog/Filtered) */}
-          {filteredStocks.map((stock) => {
-            const holding = stockHoldings.find((h) => h.symbol === stock.symbol);
-            return (
-              <StockCard
-                key={stock.id}
-                stock={stock}
-                heldShares={holding?.shares || 0}
-                onTradePress={(action) => openModal('stock_trade', { stock, action, holding })}
-              />
-            );
-          })}
-
-          {/* Live Exchange Discovery Section */}
-          {additionalLiveStocks.length > 0 && (
-            <View style={styles.liveDiscoverySection}>
-              <View style={styles.liveDiscoveryHeader}>
-                <View style={styles.liveDiscoveryHeaderLeft}>
-                  <View style={styles.livePulseDot} />
-                  <Text style={styles.liveDiscoveryTitle}>Live Market Search Results</Text>
-                </View>
-                <View style={styles.liveDiscoveryBadge}>
-                  <Text style={styles.liveDiscoveryBadgeText}>LIVE FEED</Text>
-                </View>
+            {searchRows.length === 0 && !isSearchingLive ? (
+              <View style={styles.emptySearch}>
+                <Icon name="search" size={24} color={THEME.colors.textMuted} />
+                <Text style={styles.emptySearchText}>
+                  No instruments matched. Try a company name or ticker symbol.
+                </Text>
               </View>
-              <Text style={styles.liveDiscoverySub}>
-                Discovered from live exchange feed in real-time. Tap to trade or view live chart.
-              </Text>
-
-              {additionalLiveStocks.map((stock) => {
-                const holding = stockHoldings.find((h) => h.symbol === stock.symbol);
+            ) : (
+              searchRows.map((stock) => {
+                const holding = stockHoldings.find(
+                  (h) => h.symbol?.toUpperCase() === stock.symbol?.toUpperCase()
+                );
                 return (
                   <StockCard
-                    key={stock.id}
+                    key={`${stock.id}-${stock.symbol}`}
                     stock={stock}
-                    heldShares={holding?.shares || 0}
-                    onTradePress={(action) => openModal('stock_trade', { stock, action, holding })}
+                    heldShares={holding?.shares ?? 0}
+                    onCardPress={() => openDetail(stock)}
+                    onTradePress={() => openDetail(stock)}
                   />
                 );
-              })}
-            </View>
-          )}
+              })
+            )}
+          </View>
+        ) : (
+          <>
+            {/* --- Index ticker strip --- */}
+            {indices.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.tickerStrip}
+              >
+                {indices.map((index) => (
+                  <TouchableOpacity
+                    key={index.id}
+                    activeOpacity={0.85}
+                    onPress={() => openDetail(index)}
+                    style={styles.tickerCard}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.tickerSymbol} numberOfLines={1}>
+                      {index.symbol}
+                    </Text>
+                    <Text style={styles.tickerPrice} numberOfLines={1}>
+                      {formatCurrencyOrDash(index.currentPrice)}
+                    </Text>
+                    <Text
+                      style={[styles.tickerChange, { color: moveColor(index.changePercent) }]}
+                      numberOfLines={1}
+                    >
+                      {formatPercentage(index.changePercent, true, 2)}
+                    </Text>
+                    <View style={styles.tickerSpark}>
+                      <StockLineChart
+                        data={index.sparkline}
+                        color={moveColor(index.changePercent)}
+                        height={32}
+                        showLabels={false}
+                      />
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : null}
 
-          {/* Live Searching Indicator */}
-          {isSearchingLive && filteredStocks.length === 0 && (
-            <View style={styles.liveSearchingBox}>
-              <ActivityIndicator size="small" color={THEME.colors.primaryDark} />
-              <Text style={styles.liveSearchingText}>
-                Searching live market exchanges for "{searchQuery}"...
+            {/* --- Market snapshot --- */}
+            <View style={styles.block}>
+              <BreadthPanel
+                advancing={breadth.advancing}
+                declining={breadth.declining}
+                unchanged={breadth.unchanged}
+                totalVolume={breadth.totalVolume}
+              />
+            </View>
+
+            {/* --- Most bought (order-flow data) --- */}
+            <View style={styles.block}>
+              <SectionHeader
+                title="Most Bought"
+                subtitle="What investors are buying most today"
+              />
+              <SectionStateView state={mostBought} />
+            </View>
+
+            {/* --- Top movers: ranked list with its own filters --- */}
+            <View style={styles.block}>
+              <SectionHeader
+                title="Top Movers Today"
+                subtitle="Biggest percentage moves, by company size"
+              />
+
+              <View style={styles.toggleRow}>
+                {(['gainers', 'losers'] as MoverDirection[]).map((dir) => {
+                  const active = moverDirection === dir;
+                  return (
+                    <TouchableOpacity
+                      key={dir}
+                      onPress={() => setMoverDirection(dir)}
+                      style={[
+                        styles.toggleBtn,
+                        active && {
+                          backgroundColor: dir === 'gainers' ? '#E8FAF2' : '#FFEBEF',
+                          borderColor: dir === 'gainers' ? THEME.colors.primary : THEME.colors.coral,
+                        },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                    >
+                      <Icon
+                        name={dir === 'gainers' ? 'arrow-up-right' : 'arrow-down-right'}
+                        size={13}
+                        color={active ? (dir === 'gainers' ? THEME.colors.primaryDark : THEME.colors.coral) : THEME.colors.textMuted}
+                      />
+                      <Text
+                        style={[
+                          styles.toggleText,
+                          active && {
+                            color: dir === 'gainers' ? THEME.colors.primaryDark : THEME.colors.coral,
+                          },
+                        ]}
+                      >
+                        {dir === 'gainers' ? 'Gainers' : 'Losers'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chipRow}
+              >
+                {(
+                  [
+                    ['all', 'All'],
+                    ['large', 'Large cap'],
+                    ['mid', 'Mid cap'],
+                    ['small', 'Small cap'],
+                  ] as [MoverSegment, string][]
+                ).map(([seg, label]) => {
+                  const active = moverSegment === seg;
+                  return (
+                    <TouchableOpacity
+                      key={seg}
+                      onPress={() => setMoverSegment(seg)}
+                      style={[styles.chip, active && styles.chipActive]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                    >
+                      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              <View style={styles.listCard}>
+                <SectionStateView state={movers} skeletonRows={5} />
+                {movers.phase === 'ok'
+                  ? movers.data.map((row, i) => (
+                      <RankedRow
+                        key={row.stock.symbol}
+                        rank={i + 1}
+                        stock={row.stock}
+                        onPress={() => openDetail(row.stock)}
+                      />
+                    ))
+                  : null}
+              </View>
+
+              <LearnChip
+                label="What does market cap mean?"
+                onPress={() => setOpenExplainer(openExplainer === 'marketCap' ? null : 'marketCap')}
+              />
+            </View>
+
+            {/* --- Volume shockers: relative-volume bars --- */}
+            <View style={styles.block}>
+              <SectionHeader
+                title="Volume Shockers"
+                subtitle="Trading far above their own normal activity"
+              />
+              <View style={styles.listCard}>
+                <SectionStateView
+                  state={shockers}
+                  skeletonRows={4}
+                  emptyLabel="Nothing is trading unusually heavily right now."
+                />
+                {shockers.phase === 'ok'
+                  ? shockers.data.map((row) => (
+                      <MetricBarRow
+                        key={row.stock.symbol}
+                        stock={row.stock}
+                        // 5x relative volume fills the bar.
+                        fill={clamp(row.relativeVolume / 5, 0, 1)}
+                        headline={`${row.relativeVolume.toFixed(1)}x`}
+                        caption={`${formatCompactNumber(row.volume)} vs ${formatCompactNumber(
+                          row.averageVolume
+                        )} average`}
+                        onPress={() => openDetail(row.stock)}
+                      />
+                    ))
+                  : null}
+              </View>
+              <LearnChip
+                label="What is relative volume?"
+                onPress={() => setOpenExplainer(openExplainer === 'rvol' ? null : 'rvol')}
+              />
+            </View>
+
+            {/* --- Top intraday: horizontal rail --- */}
+            <View style={styles.block}>
+              <SectionHeader
+                title="Top Intraday"
+                subtitle="Widest swing between today's high and low"
+              />
+              {intraday.phase === 'ok' ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.rail}
+                >
+                  {intraday.data.map((row) => (
+                    <RailTile
+                      key={row.stock.symbol}
+                      stock={row.stock}
+                      metricLabel="Day range"
+                      metricValue={`${row.rangePercent.toFixed(2)}%`}
+                      onPress={() => openDetail(row.stock)}
+                    />
+                  ))}
+                </ScrollView>
+              ) : (
+                <SectionStateView state={intraday} skeletonRows={2} />
+              )}
+              <LearnChip
+                label="What does intraday mean?"
+                onPress={() => setOpenExplainer(openExplainer === 'intraday' ? null : 'intraday')}
+              />
+            </View>
+
+            {/* --- Trading screens: filter tiles + inline results --- */}
+            <View style={styles.block}>
+              <SectionHeader
+                title="Trading Screens"
+                subtitle="Filter the market by what is actually happening"
+              />
+              <View style={styles.screenGrid}>
+                {TRADING_SCREENS.map((screen) => {
+                  const active = activeScreen === screen.id;
+                  return (
+                    <TouchableOpacity
+                      key={screen.id}
+                      onPress={() => setActiveScreen(screen.id)}
+                      style={[styles.screenTile, active && styles.screenTileActive]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                    >
+                      <Text style={[styles.screenLabel, active && styles.screenLabelActive]} numberOfLines={1}>
+                        {screen.label}
+                      </Text>
+                      <Text style={[styles.screenDesc, active && styles.screenDescActive]} numberOfLines={2}>
+                        {screen.description}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <View style={styles.listCard}>
+                <SectionStateView
+                  state={screenResults}
+                  skeletonRows={4}
+                  emptyLabel="No instruments match this screen today."
+                />
+                {screenResults.phase === 'ok'
+                  ? screenResults.data.slice(0, 8).map((stock, i) => (
+                      <RankedRow
+                        key={stock.symbol}
+                        rank={i + 1}
+                        stock={stock}
+                        onPress={() => openDetail(stock)}
+                      />
+                    ))
+                  : null}
+              </View>
+
+              <Text style={styles.screenHint}>
+                {TRADING_SCREENS.find((s) => s.id === activeScreen)?.hint}
               </Text>
             </View>
-          )}
 
-          {/* Empty State */}
-          {!isSearchingLive && filteredStocks.length === 0 && additionalLiveStocks.length === 0 && (
-            <View style={styles.emptyState}>
-              <Icon name="search" size={32} color={THEME.colors.textMuted} />
-              <Text style={styles.emptyStateTitle}>
-                {searchQuery.trim() ? `No instruments found for "${searchQuery}"` : 'No instruments found'}
-              </Text>
-              <Text style={styles.emptyStateSub}>
-                {searchQuery.trim()
-                  ? 'Search any listed company or ticker symbol worldwide (e.g. SWIGGY, PAYTM, ZOMATO, MRF, AAPL, TSLA).'
-                  : 'Try searching for Reliance, TCS, HDFC Bank, Infosys, or Tata Motors.'}
-              </Text>
+            {/* --- Sectors: heatmap --- */}
+            <View style={styles.block}>
+              <SectionHeader
+                title="Sectors Trading Today"
+                subtitle="Stronger colour means a bigger average move"
+              />
+              {sectors.phase === 'ok' ? (
+                <View style={styles.heatGrid}>
+                  {sectors.data.map((row) => (
+                    <HeatCell
+                      key={row.sector}
+                      label={row.sector}
+                      changePercent={row.averageChangePercent}
+                      advancing={row.advancing}
+                      declining={row.declining}
+                      onPress={() => setSearchQuery(row.sector)}
+                    />
+                  ))}
+                </View>
+              ) : (
+                <SectionStateView state={sectors} skeletonRows={3} />
+              )}
             </View>
-          )}
-        </View>
 
-        <View style={{ height: 100 }} />
+            {/* --- MTF --- */}
+            <View style={styles.block}>
+              <SectionHeader title="Most Bought MTF" subtitle="Margin Trading Facility activity" />
+              <SectionStateView state={mtf} />
+              <LearnChip
+                label="What is MTF?"
+                onPress={() => setOpenExplainer(openExplainer === 'mtf' ? null : 'mtf')}
+              />
+            </View>
+
+            {/* --- ETFs --- */}
+            <View style={styles.block}>
+              <SectionHeader title="Most Bought ETFs" subtitle="Baskets of shares in a single trade" />
+              <SectionStateView state={etfs} />
+              <LearnChip
+                label="What is an ETF?"
+                onPress={() => setOpenExplainer(openExplainer === 'etf' ? null : 'etf')}
+              />
+            </View>
+
+            {/* --- News --- */}
+            <View style={styles.block}>
+              <SectionHeader title="Stocks in News" subtitle="Headlines moving the market" />
+              <SectionStateView state={news} />
+            </View>
+          </>
+        )}
+
+        <View style={styles.bottomSpace} />
       </ScrollView>
+
+      {/* Explainer sheet */}
+      {explainer ? (
+        <TouchableOpacity
+          style={styles.explainerBackdrop}
+          activeOpacity={1}
+          onPress={() => setOpenExplainer(null)}
+        >
+          <View style={styles.explainerCard}>
+            <View style={styles.explainerHeader}>
+              <Icon name="lightbulb" size={16} color={THEME.colors.amberDark} />
+              <Text style={styles.explainerTitle}>{explainer.title}</Text>
+            </View>
+            <Text style={styles.explainerBody}>{explainer.body}</Text>
+            <TouchableOpacity
+              onPress={() => setOpenExplainer(null)}
+              style={styles.explainerClose}
+              accessibilityRole="button"
+            >
+              <Text style={styles.explainerCloseText}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: THEME.colors.background,
-  },
+  container: { flex: 1, backgroundColor: THEME.colors.background },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
     paddingHorizontal: THEME.spacing.lg,
     paddingTop: THEME.spacing.sm,
-    paddingBottom: THEME.spacing.xs,
-    gap: 12,
+    paddingBottom: 6,
   },
-  headerTitleBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-  title: {
-    ...THEME.typography.h2,
-    color: THEME.colors.textPrimary,
-  },
-  subtitle: {
-    fontSize: 11,
-    color: THEME.colors.textSecondary,
-    marginTop: 1,
-  },
-  cashBadge: {
-    backgroundColor: THEME.colors.obsidian,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: THEME.radii.pill,
-    alignItems: 'flex-end',
-    flexShrink: 0,
-    maxWidth: '45%',
-  },
-  cashBadgeLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: THEME.colors.textMuted,
-  },
-  cashBadgeAmount: {
-    fontSize: 13,
+  headerTextCol: { flex: 1, minWidth: 0 },
+  headerTitle: {
+    fontSize: 22,
     fontWeight: '900',
-    color: THEME.colors.accentYellow,
-  },
-  statusBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: THEME.colors.backgroundSecondary,
-    paddingHorizontal: THEME.spacing.lg,
-    paddingVertical: 6,
-    marginHorizontal: THEME.spacing.lg,
-    marginVertical: 6,
-    borderRadius: THEME.radii.md,
-  },
-  statusBannerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flex: 1,
-  },
-  liveIndicatorDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
-  statusBannerText: {
-    fontSize: 10,
-    fontWeight: '700',
     color: THEME.colors.textPrimary,
+    letterSpacing: -0.5,
   },
-  simulatedTag: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: THEME.colors.accentYellow,
-    backgroundColor: THEME.colors.obsidian,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: THEME.radii.xs,
-    letterSpacing: 0.5,
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
+  statusDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
+  statusText: { fontSize: 11, fontWeight: '600', color: THEME.colors.textMuted, flexShrink: 1 },
+  refreshBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: THEME.colors.accentYellow,
   },
-  scrollContent: {
-    paddingHorizontal: THEME.spacing.lg,
-    paddingBottom: 120,
-  },
-  sectionContainer: {
-    marginTop: 8,
-  },
-  searchBarContainer: {
+
+  searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: THEME.colors.card,
-    borderRadius: THEME.radii.lg,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderColor: THEME.colors.cardBorder,
-    borderWidth: 1.5,
     gap: 8,
+    marginHorizontal: THEME.spacing.lg,
     marginBottom: 8,
-    ...THEME.shadows.sm,
+    paddingHorizontal: 12,
+    minHeight: 44,
+    borderRadius: THEME.radii.md,
+    backgroundColor: THEME.colors.card,
+    borderWidth: 1,
+    borderColor: THEME.colors.cardBorder,
   },
   searchInput: {
     flex: 1,
-    fontSize: 12,
-    color: THEME.colors.textPrimary,
-    fontWeight: '600',
-    padding: 0,
-  },
-  filterChipsScroll: {
-    gap: 8,
-    paddingBottom: 6,
-  },
-  filterChip: {
-    backgroundColor: THEME.colors.card,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: THEME.radii.full,
-    borderColor: THEME.colors.cardBorder,
-    borderWidth: 1.5,
-  },
-  filterChipSelected: {
-    backgroundColor: THEME.colors.obsidian,
-    borderColor: THEME.colors.obsidian,
-  },
-  filterChipText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: THEME.colors.textSecondary,
-  },
-  filterChipTextSelected: {
-    color: '#FFFFFF',
-  },
-  resultsInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginVertical: 8,
-  },
-  resultsCountText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: THEME.colors.textMuted,
-  },
-  liveBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  liveIndicatorDotGreen: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#00D09C',
-  },
-  freshnessText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: THEME.colors.textMuted,
-    letterSpacing: 0.5,
-  },
-  liveDiscoverySection: {
-    marginTop: 14,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: THEME.colors.cardBorderSubtle,
-  },
-  liveDiscoveryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  liveDiscoveryHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  livePulseDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#00D09C',
-  },
-  liveDiscoveryTitle: {
+    minWidth: 0,
     fontSize: 13,
-    fontWeight: '900',
+    fontWeight: '600',
     color: THEME.colors.textPrimary,
+    paddingVertical: 10,
   },
-  liveDiscoveryBadge: {
-    backgroundColor: '#00D09C15',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: THEME.radii.xs,
+
+  scroll: { paddingBottom: 20 },
+  block: { paddingHorizontal: THEME.spacing.lg, marginBottom: 22, gap: 10 },
+  bottomSpace: { height: 110 },
+
+  tickerStrip: { paddingHorizontal: THEME.spacing.lg, gap: 10, paddingBottom: 18 },
+  tickerCard: {
+    width: 152,
+    backgroundColor: THEME.colors.card,
+    borderRadius: THEME.radii.lg,
     borderWidth: 1,
-    borderColor: '#00D09C40',
+    borderColor: THEME.colors.cardBorder,
+    padding: 12,
   },
-  liveDiscoveryBadgeText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#00D09C',
-    letterSpacing: 0.5,
+  tickerSymbol: { fontSize: 11, fontWeight: '800', color: THEME.colors.textMuted },
+  tickerPrice: { fontSize: 17, fontWeight: '900', color: THEME.colors.textPrimary, marginTop: 3 },
+  tickerChange: { fontSize: 12, fontWeight: '800', marginTop: 1 },
+  tickerSpark: { height: 32, marginTop: 6 },
+
+  listCard: {
+    backgroundColor: THEME.colors.card,
+    borderRadius: THEME.radii.lg,
+    borderWidth: 1,
+    borderColor: THEME.colors.cardBorder,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
   },
-  liveDiscoverySub: {
-    fontSize: 11,
-    color: THEME.colors.textSecondary,
-    marginBottom: 10,
-  },
-  liveSearchingBox: {
+
+  toggleRow: { flexDirection: 'row', gap: 8 },
+  toggleBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
-    gap: 8,
+    gap: 5,
+    paddingVertical: 9,
+    borderRadius: THEME.radii.md,
+    borderWidth: 1,
+    borderColor: THEME.colors.cardBorder,
+    backgroundColor: THEME.colors.card,
   },
-  liveSearchingText: {
+  toggleText: { fontSize: 12, fontWeight: '800', color: THEME.colors.textMuted },
+
+  chipRow: { gap: 7, paddingVertical: 2 },
+  chip: {
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    borderRadius: THEME.radii.pill,
+    backgroundColor: THEME.colors.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  chipActive: { backgroundColor: THEME.colors.obsidian, borderColor: THEME.colors.obsidian },
+  chipText: { fontSize: 11, fontWeight: '800', color: THEME.colors.textSecondary },
+  chipTextActive: { color: THEME.colors.accentYellow },
+
+  rail: { gap: 10, paddingVertical: 2, paddingRight: 4 },
+
+  screenGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  screenTile: {
+    flexGrow: 1,
+    flexBasis: '30%',
+    minWidth: 104,
+    borderRadius: THEME.radii.md,
+    borderWidth: 1,
+    borderColor: THEME.colors.cardBorder,
+    backgroundColor: THEME.colors.card,
+    padding: 10,
+    gap: 2,
+  },
+  screenTileActive: { backgroundColor: THEME.colors.obsidian, borderColor: THEME.colors.obsidian },
+  screenLabel: { fontSize: 12, fontWeight: '800', color: THEME.colors.textPrimary },
+  screenLabelActive: { color: THEME.colors.accentYellow },
+  screenDesc: { fontSize: 9, lineHeight: 13, color: THEME.colors.textMuted },
+  screenDescActive: { color: '#CBD5E1' },
+  screenHint: { fontSize: 11, lineHeight: 16, color: THEME.colors.textMuted, fontStyle: 'italic' },
+
+  heatGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+
+  emptySearch: { alignItems: 'center', gap: 8, paddingVertical: 32 },
+  emptySearchText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: THEME.colors.textSecondary,
+    color: THEME.colors.textMuted,
+    textAlign: 'center',
+    paddingHorizontal: 24,
   },
-  emptyState: {
+
+  explainerBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(11,19,43,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-    gap: 8,
+    padding: THEME.spacing.lg,
   },
-  emptyStateTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: THEME.colors.textPrimary,
+  explainerCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: THEME.colors.card,
+    borderRadius: THEME.radii.xl,
+    padding: THEME.spacing.lg,
+    gap: 10,
   },
-  emptyStateSub: {
-    fontSize: 11,
-    color: THEME.colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 16,
+  explainerHeader: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  explainerTitle: { flex: 1, fontSize: 15, fontWeight: '900', color: THEME.colors.textPrimary },
+  explainerBody: { fontSize: 13, lineHeight: 19, color: THEME.colors.textSecondary },
+  explainerClose: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: THEME.radii.pill,
+    backgroundColor: THEME.colors.obsidian,
   },
+  explainerCloseText: { fontSize: 12, fontWeight: '800', color: THEME.colors.accentYellow },
 });

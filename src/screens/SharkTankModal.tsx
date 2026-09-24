@@ -28,7 +28,7 @@ const safeStartup = (s: SharkTankStartup | null | undefined): SharkTankStartup =
   founder: s?.founder ?? 'Student Founder',
   founderAge: s?.founderAge ?? 15,
   cohort: s?.cohort ?? 'Grade 9',
-  isApprovedByTeacher: s?.isApprovedByTeacher ?? true,
+  isVerifiedPitch: s?.isVerifiedPitch ?? true,
   totalRaisedVirtual: s?.totalRaisedVirtual ?? 25000,
   investorCount: s?.investorCount ?? 5,
   problem: s?.problem ?? 'Everyday campus friction solved with technology.',

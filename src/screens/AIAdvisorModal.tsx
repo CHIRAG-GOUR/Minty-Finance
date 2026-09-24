@@ -35,7 +35,7 @@ export const AIAdvisorModal: React.FC<AIAdvisorModalProps> = ({ visible, onClose
       const greetingMsg: AIChatMessage = {
         id: 'msg-init',
         sender: 'assistant',
-        text: `Hello ${userProfile.name}! I'm your Minty Financial Advisor. ${initialAdvice.message}`,
+        text: `Hello ${userProfile.displayName}! I'm your Minty Financial Advisor. ${initialAdvice.message}`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         suggestions: initialAdvice.suggestedPrompts,
       };

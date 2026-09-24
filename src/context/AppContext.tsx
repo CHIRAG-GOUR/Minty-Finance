@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useEffect, useMemo, ReactNo
 import { AppState, AppStateStatus } from 'react-native';
 import {
   UserProfile,
-  UserRole,
   VirtualWallet,
   StockHolding,
   MutualFundHolding,
@@ -12,7 +11,6 @@ import {
   LessonModule,
   Badge,
   Challenge,
-  ClassroomCohort,
   SystemMarketConfig,
   LeaderboardUser,
   TabType,
@@ -30,12 +28,9 @@ import {
   INITIAL_VIRTUAL_BALANCE,
 } from '../constants/mockData';
 import { StorageService, AppSettings } from '../services/storage';
-import {
-  FirebaseService,
-  DEMO_ACCOUNTS,
-  INITIAL_COHORTS,
-  INITIAL_MARKET_CONFIG,
-} from '../services/firebaseService';
+import { SimulationStore, INITIAL_MARKET_CONFIG } from '../services/simulationStore';
+import { useAuth } from './AuthContext';
+import { setStorageScope } from '../services/storage';
 import { GamificationEngine } from '../services/gamificationEngine';
 import { calculateFDMaturity } from '../utils/financialMath';
 import { MarketDataService } from '../services/marketDataService';
@@ -65,7 +60,6 @@ interface AppContextType {
   stockCatalog: StockItem[];
   fundCatalog: MutualFundItem[];
   sharkTankStartups: SharkTankStartup[];
-  cohorts: ClassroomCohort[];
   marketConfig: SystemMarketConfig;
   settings: AppSettings;
   activeTab: TabType;
@@ -81,8 +75,6 @@ interface AppContextType {
   openModal: (modalName: string, data?: any) => void;
   closeModal: () => void;
   showToast: (title: string, message: string, type?: 'success' | 'info' | 'warning') => void;
-  switchUserRole: (role: UserRole) => Promise<void>;
-  completeOnboarding: (name: string) => Promise<void>;
   buyStock: (symbol: string, shares: number) => Promise<boolean>;
   sellStock: (symbol: string, shares: number) => Promise<boolean>;
   calculateCharges: (amount: number, isBuy: boolean) => SimulatedChargeBreakdown;
@@ -94,7 +86,6 @@ interface AppContextType {
   approveStartup: (startupId: string) => Promise<void>;
   updateMarketConfig: (config: SystemMarketConfig) => Promise<void>;
   addNewStockToMarket: (stock: StockItem) => Promise<void>;
-  assignTeacherChallenge: (cohortId: string, challenge: Omit<Challenge, 'id'>) => Promise<void>;
   updateBudgetIncome: (income: number) => Promise<void>;
   updateBudgetItem: (id: string, allocated: number, spent: number) => Promise<void>;
   completeLesson: (lessonId: string, score: number) => Promise<void>;
@@ -104,8 +95,6 @@ interface AppContextType {
   resetSimulationData: () => Promise<void>;
   refreshMarketData: () => Promise<void>;
 }
-
-const defaultProfile: UserProfile = DEMO_ACCOUNTS[0];
 
 const defaultWallet: VirtualWallet = {
   cashBalance: INITIAL_VIRTUAL_BALANCE,
@@ -126,9 +115,39 @@ const defaultMarketStatus: MarketStatusInfo = {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+/**
+ * Placeholder identity for the brief moment before the auth profile resolves.
+ * App.tsx only mounts AppProvider once `status === 'authenticated'`, so this is
+ * never what a signed-in user actually sees.
+ */
+const ANONYMOUS_PROFILE: UserProfile = {
+  uid: '',
+  phoneNumber: '',
+  displayName: 'Investor',
+  email: '',
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  lastLoginAt: new Date().toISOString(),
+  level: 1,
+  levelTitle: 'Money Starter',
+  currentXP: 0,
+  nextLevelXP: 500,
+  streakDays: 1,
+  lastActiveDate: new Date().toISOString().split('T')[0],
+};
+
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
-  const [userProfile, setUserProfile] = useState<UserProfile>(defaultProfile);
+  // Identity is owned by AuthContext. AppContext mirrors it so existing screens
+  // can keep reading `userProfile`, and writes progress back through the auth
+  // layer so it lands in Firestore under this UID.
+  const { profile: authProfile, uid, patchProfile } = useAuth();
+  const userProfile: UserProfile = authProfile ?? ANONYMOUS_PROFILE;
+
+  // Bind persistence to this UID before any read or write happens. Done during
+  // render (not in an effect) so the hydration effect below cannot race it and
+  // load the previous account's holdings.
+  setStorageScope(uid);
   const [wallet, setWallet] = useState<VirtualWallet>(defaultWallet);
   const [stockHoldings, setStockHoldings] = useState<StockHolding[]>([]);
   const [fundHoldings, setFundHoldings] = useState<MutualFundHolding[]>([]);
@@ -147,7 +166,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [stockCatalog, setStockCatalog] = useState<StockItem[]>(MOCK_STOCKS);
   const [fundCatalog, setFundCatalog] = useState<MutualFundItem[]>(MOCK_MUTUAL_FUNDS);
   const [sharkTankStartups, setSharkTankStartups] = useState<SharkTankStartup[]>(MOCK_SHARK_TANK_STARTUPS);
-  const [cohorts, setCohorts] = useState<ClassroomCohort[]>(INITIAL_COHORTS);
   const [marketConfig, setMarketConfig] = useState<SystemMarketConfig>(INITIAL_MARKET_CONFIG);
   const [marketStatus, setMarketStatus] = useState<MarketStatusInfo>(defaultMarketStatus);
   const [watchlist, setWatchlist] = useState<string[]>(['RELIANCE', 'TCS', 'HDFCBANK', 'INFY']);
@@ -169,7 +187,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     isMountedRef.current = true;
     async function loadData() {
       try {
-        const storedProfile = await FirebaseService.getCurrentUser();
         const storedWallet = await StorageService.getWallet();
         const storedStocks = await StorageService.getStockHoldings();
         const storedFunds = await StorageService.getFundHoldings();
@@ -181,37 +198,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const storedChallenges = await StorageService.getChallenges();
         const storedSettings = await StorageService.getSettings();
         const storedWatchlist = await StorageService.getWatchlist();
-        const fbCohorts = await FirebaseService.getCohorts();
-        const fbMarketConfig = await FirebaseService.getMarketConfig();
-        const fbStartups = await FirebaseService.getStartups();
+        const fbMarketConfig = await SimulationStore.getMarketConfig();
+        const fbStartups = await SimulationStore.getStartups();
 
         // Fetch initial market status and stocks from MarketDataService
         const liveStatus = await MarketDataService.getMarketStatus();
         const liveStocks = await MarketDataService.getStocks();
         const liveFunds = await MarketDataService.getMutualFunds();
-
-        if (storedProfile && typeof storedProfile.name === 'string') {
-          // Sanitize any legacy cached names from older local storage
-          if (
-            storedProfile.name.includes('Shaurya') ||
-            storedProfile.name.includes('Prashant') ||
-            storedProfile.name.includes('Neha') ||
-            storedProfile.name.includes('Lavanya') ||
-            storedProfile.name.includes('Abhyudh') ||
-            storedProfile.name.includes('Abhimannyu') ||
-            storedProfile.name.includes('Anujeet')
-          ) {
-            storedProfile.name =
-              storedProfile.role === 'super_admin'
-                ? 'Chirag (Super Admin)'
-                : storedProfile.role === 'teacher'
-                ? 'Faculty Mentor'
-                : 'Student Investor';
-          }
-          const { updatedProfile } = GamificationEngine.checkStreak(storedProfile);
-          setUserProfile(updatedProfile);
-          await FirebaseService.updateUserProfile(updatedProfile);
-        }
 
         setWallet(storedWallet);
         // Persisted collections come back as whatever JSON was on disk, possibly
@@ -239,7 +232,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setChallenges(storedChallenges);
         setSettings(storedSettings);
         setWatchlist(storedWatchlist);
-        setCohorts(fbCohorts);
         setMarketConfig(fbMarketConfig);
         setMarketStatus(liveStatus);
         const mergedStartups = MOCK_SHARK_TANK_STARTUPS.map((mock) => {
@@ -264,7 +256,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return () => {
       isMountedRef.current = false;
     };
-  }, []);
+    // Re-runs on account change so a second user on the same device gets their
+    // own wallet, holdings and ledger rather than the previous user's.
+  }, [uid]);
 
   // Live market ticks.
   //
@@ -383,29 +377,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return VirtualOrderEngine.calculateCharges(amount, isBuy);
   };
 
-  // 1-Tap RBAC Persona Switcher
-  const switchUserRole = async (role: UserRole) => {
-    const profile = await FirebaseService.switchRole(role);
-    setUserProfile(profile);
-
-    if (role === 'teacher') {
-      setActiveTab('classroom');
-    } else if (role === 'super_admin') {
-      setActiveTab('admin_control');
-    } else {
-      setActiveTab('home');
-    }
-
-    const roleLabel =
-      role === 'super_admin' ? 'Super Admin' : role === 'teacher' ? 'Teacher' : 'Student (Grade 9)';
-    showToast('Persona Switched', `Active Role: ${roleLabel} (${profile.name})`, 'info');
-  };
-
   const addXP = async (amount: number, reason: string) => {
     const res = GamificationEngine.addXP(userProfile, amount);
-    setUserProfile(res.updatedProfile);
-    await FirebaseService.updateUserProfile(res.updatedProfile);
-    await StorageService.saveUserProfile(res.updatedProfile);
+    await patchProfile({
+      currentXP: res.updatedProfile.currentXP,
+      level: res.updatedProfile.level,
+      levelTitle: res.updatedProfile.levelTitle,
+      nextLevelXP: res.updatedProfile.nextLevelXP,
+      streakDays: res.updatedProfile.streakDays,
+      lastActiveDate: res.updatedProfile.lastActiveDate,
+    });
 
     if (res.leveledUp) {
       showToast('Level Up!', `You reached Level ${res.newLevel}: ${res.newLevelTitle}!`, 'success');
@@ -443,19 +424,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const completeOnboarding = async (name: string) => {
-    const updated: UserProfile = {
-      ...userProfile,
-      name: name.trim() || 'Young Financer',
-      isOnboarded: true,
-      currentXP: 250,
-    };
-    setUserProfile(updated);
-    await FirebaseService.updateUserProfile(updated);
-    await StorageService.saveUserProfile(updated);
-    showToast('Welcome to Minty Finance!', '₹1,00,000 virtual money credited for investment practice.', 'success');
-  };
-
   const buyStock = async (symbol: string, shares: number): Promise<boolean> => {
     let stock = stockCatalog.find((s) => s.symbol.toUpperCase() === symbol.toUpperCase());
     if (!stock) {
@@ -476,8 +444,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     try {
       const result = VirtualOrderEngine.executeBuy(
-        userProfile.id,
-        userProfile.name,
+        userProfile.uid,
+        userProfile.displayName,
         stock,
         shares,
         wallet,
@@ -527,8 +495,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     try {
       const result = VirtualOrderEngine.executeSell(
-        userProfile.id,
-        userProfile.name,
+        userProfile.uid,
+        userProfile.displayName,
         stock,
         shares,
         wallet,
@@ -598,8 +566,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const newTx: Transaction = {
       id: Date.now().toString(),
-      userId: userProfile.id,
-      userName: userProfile.name,
+      userId: userProfile.uid,
+      userName: userProfile.displayName,
       type: 'buy_fund',
       title: `Invested in ${fund.name}`,
       amount,
@@ -664,8 +632,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const updatedFDs = [newFD, ...fdHoldings];
     const newTx: Transaction = {
       id: Date.now().toString(),
-      userId: userProfile.id,
-      userName: userProfile.name,
+      userId: userProfile.uid,
+      userName: userProfile.displayName,
       type: 'open_fd',
       title: `Opened ${durationMonths}M Fixed Deposit @ ${rate}%`,
       amount: principal,
@@ -708,8 +676,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const newTx: Transaction = {
       id: Date.now().toString(),
-      userId: userProfile.id,
-      userName: userProfile.name,
+      userId: userProfile.uid,
+      userName: userProfile.displayName,
       type: 'shark_tank_invest',
       title: `Shark Tank: Invested in ${startup.name} (${equity}% equity)`,
       amount,
@@ -737,27 +705,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const approveStartup = async (startupId: string) => {
-    await FirebaseService.approveSharkTankStartup(startupId);
+    await SimulationStore.markPitchVerified(startupId);
     setSharkTankStartups((prev) =>
-      prev.map((s) => (s.id === startupId ? { ...s, isApprovedByTeacher: true } : s))
+      prev.map((s) => (s.id === startupId ? { ...s, isVerifiedPitch: true } : s))
     );
     showToast('Proposal Approved', 'Startup listed for student cohort investment.', 'success');
   };
 
   const updateMarketConfig = async (config: SystemMarketConfig) => {
     setMarketConfig(config);
-    await FirebaseService.updateMarketConfig(config);
+    await SimulationStore.updateMarketConfig(config);
   };
 
   const addNewStockToMarket = async (stock: StockItem) => {
-    await FirebaseService.addNewStock(stock);
+    await SimulationStore.addNewStock(stock);
     setStockCatalog((prev) => [stock, ...prev]);
     showToast('Stock Listed', `${stock.symbol} is now active on the virtual exchange!`, 'success');
-  };
-
-  const assignTeacherChallenge = async (cohortId: string, challengeData: Omit<Challenge, 'id'>) => {
-    const newCh = await FirebaseService.assignTeacherChallenge(cohortId, challengeData);
-    setChallenges((prev) => [newCh, ...prev]);
   };
 
   const updateBudgetIncome = async (income: number) => {
@@ -838,7 +801,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const resetSimulationData = async () => {
     await StorageService.resetAllData();
-    setUserProfile({ ...defaultProfile, isOnboarded: true });
     setWallet(defaultWallet);
     setStockHoldings([]);
     setFundHoldings([]);
@@ -874,10 +836,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 
   const currentUserLeaderboardEntry: LeaderboardUser = {
-    id: userProfile.id,
+    id: userProfile.uid,
     rank: 4,
-    name: `${userProfile.name} (You)`,
-    schoolGrade: userProfile.cohortClass || 'Grade 9',
+    name: `${userProfile.displayName} (You)`,
+    schoolGrade: 'Investor',
     level: userProfile.level,
     totalXP: userProfile.currentXP,
     badgesCount: badges.filter((b) => b.isUnlocked).length,
@@ -907,7 +869,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         stockCatalog,
         fundCatalog,
         sharkTankStartups,
-        cohorts,
         marketConfig,
         settings,
         activeTab,
@@ -921,8 +882,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         openModal,
         closeModal,
         showToast,
-        switchUserRole,
-        completeOnboarding,
         buyStock,
         sellStock,
         calculateCharges,
@@ -934,7 +893,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         approveStartup,
         updateMarketConfig,
         addNewStockToMarket,
-        assignTeacherChallenge,
         updateBudgetIncome,
         updateBudgetItem,
         completeLesson,

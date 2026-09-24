@@ -48,16 +48,25 @@ export const PortfolioScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Simulated Portfolio</Text>
-          <Text style={styles.subtitle}>
+        <View style={styles.headerTextCol}>
+          <Text style={styles.title} numberOfLines={1}>
+            Simulated Portfolio
+          </Text>
+          <Text style={styles.subtitle} numberOfLines={2}>
             Live dynamic valuation · Virtual positions & transaction ledger
           </Text>
         </View>
 
         <View style={styles.livePill}>
           <View style={styles.livePulseDot} />
-          <Text style={styles.livePillText}>LIVE VALUE</Text>
+          {/*
+            maxFontSizeMultiplier caps accessibility scaling on this pill only:
+            the label sits in a fixed-height capsule, so unbounded scaling is
+            what pushes the glyphs outside it.
+          */}
+          <Text style={styles.livePillText} numberOfLines={1} maxFontSizeMultiplier={1.3}>
+            LIVE VALUE
+          </Text>
         </View>
       </View>
 
@@ -519,6 +528,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: THEME.spacing.lg,
     paddingTop: THEME.spacing.sm,
     paddingBottom: THEME.spacing.xs,
+    gap: 10,
+  },
+  // The title column is what shrinks when space runs out. Without `flex: 1` the
+  // long subtitle pushed against the pill and squeezed "LIVE VALUE" until the
+  // label was clipped mid-word.
+  headerTextCol: {
+    flex: 1,
+    minWidth: 0,
   },
   title: {
     ...THEME.typography.h2,
@@ -526,27 +543,39 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 11,
+    lineHeight: 15,
     color: THEME.colors.textSecondary,
     marginTop: 1,
   },
   livePill: {
     flexDirection: 'row',
     alignItems: 'center',
+    // Never compress: the capsule sizes to its label instead of being squeezed
+    // by whatever sits beside it.
+    flexShrink: 0,
+    alignSelf: 'center',
     backgroundColor: THEME.colors.obsidian,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: THEME.radii.full,
-    gap: 4,
+    gap: 5,
   },
   livePulseDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
+    flexShrink: 0,
     backgroundColor: THEME.colors.accentYellow,
   },
   livePillText: {
-    fontSize: 9,
+    fontSize: 10,
+    // An explicit lineHeight plus includeFontPadding:false stops Android from
+    // vertically cropping the caps of a heavy small font inside a tight pill.
+    lineHeight: 13,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
     fontWeight: '900',
+    letterSpacing: 0.3,
     color: THEME.colors.accentYellow,
   },
   scrollContent: {
